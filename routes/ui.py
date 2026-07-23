@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from utils.config_manager import ConfigManager
 
@@ -9,7 +9,9 @@ config_manager = ConfigManager()
 
 # 1. サーバー選択画面（ルート）
 @router.get("/", response_class=HTMLResponse)
-async def index(request: Request, error: str = None):
+async def index(
+    request: Request, error: str = None
+):  # 🔑 error パラメータを受け取る
     templates = request.app.state.templates
 
     user_id = request.cookies.get("user_id")
@@ -26,7 +28,7 @@ async def index(request: Request, error: str = None):
             "is_authenticated": is_authenticated,
             "username": username,
             "guilds": managed_guilds,
-            "error_message": error,
+            "error_message": error,  # 🔑 テンプレートへ error_message を渡す
         },
     )
 
@@ -44,19 +46,24 @@ async def guild_dashboard(request: Request, guild_id: str):
         return RedirectResponse(url="/")
 
     managed_guilds = json.loads(guilds_raw)
-    target_guild = next((g for g in managed_guilds if g["id"] == guild_id), None)
+    target_guild = next(
+        (g for g in managed_guilds if g["id"] == guild_id), None
+    )
 
     if not target_guild:
-        raise HTTPException(status_code=403, detail="このサーバーへのアクセス権限がありません。")
+        raise HTTPException(
+            status_code=403, detail="このサーバーへのアクセス権限がありません。"
+        )
 
     is_admin = target_guild["is_admin"]
 
-    # データのロードと該当サーバーの抽出
     all_alarms = config_manager.load("alarms")
     all_vc_settings = config_manager.load("vc_notifier")
 
     server_alarms = {guild_id: all_alarms.get(guild_id, [])}
-    server_vc_settings = {guild_id: all_vc_settings.get(guild_id, [])} if is_admin else {}
+    server_vc_settings = (
+        {guild_id: all_vc_settings.get(guild_id, [])} if is_admin else {}
+    )
 
     return templates.TemplateResponse(
         request=request,
