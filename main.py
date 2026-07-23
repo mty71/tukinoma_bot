@@ -5,6 +5,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from utils.config_manager import ConfigManager
+from web_server import run_web_server  # 追加
 
 load_dotenv()
 BOT_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -25,7 +26,6 @@ class MyBot(commands.Bot):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # 設定マネージャーをBotオブジェクトに保持させる
         self.config_manager = ConfigManager()
 
 
@@ -38,7 +38,6 @@ async def on_ready():
     print(f" ログイン成功: {bot.user.name} (ID: {bot.user.id})")
     print("====================================")
 
-    # 参加しているサーバーへコマンドを即時同期
     try:
         for guild in bot.guilds:
             bot.tree.copy_global_to(guild=guild)
@@ -63,6 +62,8 @@ async def load_extensions():
 async def main():
     async with bot:
         await load_extensions()
+        # WebUIサーバーを非同期タスクとして並行起動
+        asyncio.create_task(run_web_server())
         await bot.start(BOT_TOKEN)
 
 

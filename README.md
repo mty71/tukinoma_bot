@@ -1,17 +1,20 @@
- Tukinoma Bot
+# Tukinoma Bot
 
-Discordサーバーのボイスチャンネル（VC）入退室通知および各種サーバー管理を行うDiscordボットです。
+Discordサーバーのボイスチャンネル（VC）入退室通知、各種サーバー管理、およびWeb連動アラーム再生を行う多機能Discordボットです。
 
 ## 主な機能
 
+- **Web連動VCアラーム機能**
+  - Webダッシュボード（`http://0.0.0.0:PORT`）から指定時刻・VC・再生曲を設定可能。
+  - 音源は **YouTube URL** または **音声ファイル（MP3等）の直接アップロード** に対応。
+  - 時間になるとBotが自動で指定VCへ接続し、音楽を再生。
 - **VC入退室通知 (`/vc`)**
-  - ボイスチャンネルへの「接続（参加）」および「切断（退出）」をリアルタイムで検知して通知。
-  - 複数VCの個別設定（VCごとに異なる通知チャンネルやメンションの指定）に対応。
-  - メンション設定（なし / ユーザー本人 / @everyone / 指定ロール）のフレキシブルな切り替え。
+  - ボイスチャンネルへの接続・切断をリアルタイム通知。
+  - 複数VCの個別設定（通知先チャンネル・メンション指定）に対応。
 - **メッセージ管理 (`/clear`)**
-  - チャンネル内のメッセージを指定した件数（1〜100件）一括削除。
+  - チャンネル内のメッセージを指定件数（1〜100件）一括削除。
 
-## コマンド一覧
+## 🛠️ コマンド一覧
 
 ### 1. VC通知コマンドグループ (`/vc`)
 | サブコマンド | 説明 | 実行権限 |
@@ -30,23 +33,32 @@ Discordサーバーのボイスチャンネル（VC）入退室通知および�
 
 ```text
 tukinoma_bot/
-├── main.py              # アプリケーションのエントリーポイント
+├── main.py              # アプリケーション起動・WebUI並行起動
+├── web_server.py        # Webダッシュボード用API (FastAPI)
 ├── requirements.txt     # 依存ライブラリ一覧
+├── .env                 # 環境変数設定
+├── .gitignore           # Git除外設定
 ├── cogs/                # 各機能モジュール (Cog)
 │   ├── vc_notifier.py   # VC通知機能 (/vc)
-│   └── moderation.py    # 管理機能 (/clear)
+│   ├── moderation.py    # 管理機能 (/clear)
+│   └── alarm.py         # アラーム自動再生Cog
 ├── utils/               # ユーティリティ
-│   └── config_manager.py# データ管理マネージャー
+│   ├── config_manager.py# データ管理マネージャー
+│   └── audio_downloader.py # YouTube音声抽出ダウンロード
 ├── data/                # 設定データ保存先 (Git除外)
-│   └── vc_notifier.json # VC通知の設定ファイル
+│   ├── vc_notifier.json # VC通知の設定ファイル
+│   ├── alarms.json      # アラームの設定ファイル
+│   └── audio/           # 保存済み音声ファイル (.mp3)
+├── templates/           # WebUIテンプレート
+│   └── index.html       # ダッシュボード画面
 └── docs/                # ドキュメント類
     └── TECHNICAL.md     # 詳細技術仕様書
 
 ```
 
-## 🚀 動作環境・セットアップ
+## 動作環境・セットアップ
 
-1. **必要環境**: Python 3.10 以上
+1. **必要環境**: Python 3.10 以上, **FFmpeg**（音声再生用）
 2. **依存ライブラリのインストール**:
 ```bash
 pip install -r requirements.txt
@@ -54,9 +66,10 @@ pip install -r requirements.txt
 
 
 3. **環境変数の設定**:
-`.env` ファイルを作成し、Discord Bot Token を設定します。
+`.env` ファイルを作成し、Bot Token と WebUI のポート番号を設定します。
 ```env
 DISCORD_TOKEN=your_bot_token_here
+PORT=8080
 ```
 
 
