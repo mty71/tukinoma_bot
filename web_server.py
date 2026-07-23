@@ -24,7 +24,7 @@ PORT = int(os.getenv("PORT", 8000))
 async def index(request: Request):
     alarms = config_manager.load("alarms")
     return templates.TemplateResponse(
-        "index.html", {"request": request, "alarms": alarms}
+        request=request, name="index.html", context={"alarms": alarms}
     )
 
 
