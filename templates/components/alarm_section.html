@@ -6,10 +6,23 @@
     </h2>
     <form onsubmit="submitForm(event, '/api/alarm/add')" class="space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <input type="text" name="guild_id" placeholder="サーバー ID" required class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
+        <!-- サーバーID（現在選択中のサーバーIDを自動入力、hiddenでも可） -->
+        <input type="text" name="guild_id" value="{% if current_guild %}{{ current_guild.id }}{% endif %}" placeholder="サーバー ID" required class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
+        
         <input type="text" name="vc_id" placeholder="対象VC ID" required class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
+        
         <input type="time" name="time_str" required class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm text-slate-200">
       </div>
+
+      <!-- 🔑 追加：再生モード選択（繰り返し / 1回のみ） -->
+      <div class="space-y-1">
+        <label class="text-xs text-slate-400 font-medium">再生モード</label>
+        <select name="mode" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm text-slate-200 focus:outline-none focus:border-brand-500 transition">
+          <option value="repeat">🔄 繰り返し（毎日）</option>
+          <option value="once">1️⃣ 1回のみ（再生後自動削除）</option>
+        </select>
+      </div>
+
       <div class="space-y-2">
         <div class="flex gap-2">
           <button type="button" onclick="switchSourceTab('youtube')" id="tabYoutube" class="px-3 py-1 rounded-lg text-xs bg-brand-500 text-white">YouTube</button>
@@ -18,7 +31,7 @@
         <input type="url" name="youtube_url" id="youtubeInputGroup" placeholder="https://www.youtube.com/watch?v=..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
         <input type="file" name="audio_file" id="fileInputGroup" accept="audio/*" class="hidden w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
       </div>
-      <button type="submit" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-medium py-2.5 rounded-xl text-sm">登録する</button>
+      <button type="submit" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-medium py-2.5 rounded-xl text-sm transition shadow-lg shadow-brand-500/25">登録する</button>
     </form>
   </section>
 
@@ -29,12 +42,20 @@
     </h2>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       {% if alarms %}
+        {% set has_alarm = false %}
         {% for guild_id, list in alarms.items() %}
           {% for alarm in list %}
+            {% set has_alarm = true %}
             <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
               <div>
-                <div class="text-2xl font-bold font-mono">{{ alarm.time }}</div>
-                <div class="text-xs text-slate-400">VC: {{ alarm.vc_channel_id }}</div>
+                <div class="flex items-center gap-2.5">
+                  <span class="text-2xl font-bold font-mono">{{ alarm.time }}</span>
+                  <!-- 🔑 モードバッジ表示 -->
+                  <span class="text-[10px] px-2 py-0.5 rounded-full {% if alarm.mode == 'once' %}bg-amber-500/10 text-amber-400 border border-amber-500/20{% else %}bg-brand-500/10 text-brand-400 border border-brand-500/20{% endif %}">
+                    {% if alarm.mode == 'once' %}1回のみ{% else %}繰り返し{% endif %}
+                  </span>
+                </div>
+                <div class="text-xs text-slate-400 mt-1">VC: {{ alarm.vc_channel_id }}</div>
               </div>
               <div class="flex items-center gap-2">
                 <button type="button" onclick="stopAlarm('{{ guild_id }}')" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-lg shadow-rose-600/20">
@@ -47,8 +68,11 @@
             </div>
           {% endfor %}
         {% endfor %}
+        {% if not has_alarm %}
+          <p class="text-slate-500 text-sm col-span-2">アラームはありません</p>
+        {% endif %}
       {% else %}
-        <p class="text-slate-500 text-sm">アラームはありません</p>
+        <p class="text-slate-500 text-sm col-span-2">アラームはありません</p>
       {% endif %}
     </div>
   </section>

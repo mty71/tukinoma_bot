@@ -61,14 +61,22 @@ class AlarmGroup(app_commands.Group):
     @app_commands.describe(
         vc="アラームを鳴らすボイスチャンネル",
         time_str="鳴らす時刻 (例: 07:30)",
+        mode="再生モード (repeat: 繰り返し, once: 1回のみ)",
         youtube_url="再生したいYouTubeのURL",
         audio_file="再生したい音声ファイル (MP3等)",
+    )
+    @app_commands.choices(
+        mode=[
+            app_commands.Choice(name="繰り返し（毎日）", value="repeat"),
+            app_commands.Choice(name="1回のみ（再生後自動削除）", value="once"),
+        ]
     )
     async def add(
         self,
         interaction: discord.Interaction,
         vc: discord.VoiceChannel,
         time_str: str,
+        mode: str = "repeat",
         youtube_url: str = None,
         audio_file: discord.Attachment = None,
     ):
@@ -101,6 +109,7 @@ class AlarmGroup(app_commands.Group):
 
         if audio_file:
             local_path = f"data/audio/{alarm_id}_{audio_file.filename}"
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
             await audio_file.save(local_path)
         elif youtube_url:
             local_path = self.downloader.download_youtube_audio(
@@ -116,18 +125,22 @@ class AlarmGroup(app_commands.Group):
             {
                 "id": alarm_id,
                 "time": time_str,
+                "mode": mode,
                 "vc_channel_id": vc.id,
                 "local_file_path": local_path,
                 "enabled": True,
+                "last_triggered": None,  # 重複発火防止用
             }
         )
         self.cog.save_data(data)
 
+        mode_text = "🔄 繰り返し" if mode == "repeat" else "1️⃣ 1回のみ"
         embed = discord.Embed(
             title="⏰ アラームを設定しました", color=0x57F287
         )
         embed.add_field(name="時刻", value=f"`{time_str}`", inline=True)
-        embed.add_field(name="対象VC", value=f"<#{vc.id}>", inline=True)
+        embed.add_field(name="モード", value=mode_text, inline=True)
+        embed.add_field(name="対象VC", value=f"<#{vc.id}>", inline=False)
         embed.add_field(name="ID", value=f"`{alarm_id}`", inline=False)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -150,9 +163,11 @@ class AlarmGroup(app_commands.Group):
 
         for alarm in data[guild_id]:
             file_name = os.path.basename(alarm.get("local_file_path", ""))
+            mode_str = "🔄 繰り返し" if alarm.get("mode", "repeat") == "repeat" else "1️⃣ 1回のみ"
             embed.add_field(
-                name=f"🕒 {alarm.get('time')} (ID: `{alarm.get('id')}`)",
+                name=f"🕒 {alarm.get('time')} ({mode_str})",
                 value=(
+                    f"└ **ID**: `{alarm.get('id')}`\n"
                     f"└ **VC**: <#{alarm.get('vc_channel_id')}>\n"
                     f"└ **音源**: `{file_name}`"
                 ),
@@ -266,28 +281,65 @@ class Alarm(commands.Cog):
             return True
         return False
 
-    @tasks.loop(seconds=30)
+    # ====================================================
+    # 🔑 トリガー部分（アラーム監視・自動削除・重複発火防止ループ）
+    # ====================================================
+    @tasks.loop(seconds=10)
     async def check_alarms(self):
         now = datetime.datetime.now()
-        current_time = now.strftime("%H:%M")
+        current_time = now.strftime("%H:%M")  # 例: "14:30"
+        current_date = now.strftime("%Y-%m-%d")  # 例: "2026-07-23"
 
         data = self.get_data()
+        updated = False
+
         for guild_id_str, alarm_list in data.items():
             guild = self.bot.get_guild(int(guild_id_str))
             if not guild:
                 continue
 
-            if self.active_alarms.get(guild.id, False):
-                continue
+            new_alarm_list = []
+            guild_updated = False
 
             for alarm in alarm_list:
                 if not alarm.get("enabled", True):
+                    new_alarm_list.append(alarm)
                     continue
 
-                if alarm.get("time") == current_time:
-                    self.bot.loop.create_task(
-                        self.play_alarm_loop(guild, alarm)
-                    )
+                alarm_time = alarm.get("time")
+                alarm_mode = alarm.get("mode", "repeat")
+                last_triggered = alarm.get("last_triggered")
+
+                # 【トリガー条件】時刻一致かつ、本日この分にまだ発火していない場合のみ
+                if current_time == alarm_time and last_triggered != current_date:
+                    # 再生中でなければ起動
+                    if not self.active_alarms.get(guild.id, False):
+                        self.bot.loop.create_task(
+                            self.play_alarm_loop(guild, alarm)
+                        )
+
+                    # 本日発火済みにマーク（これにより止めても同じ分の間に再発火するバグを防ぎます）
+                    alarm["last_triggered"] = current_date
+                    guild_updated = True
+                    updated = True
+
+                    # 【自動削除】1回のみ（once）の場合はリストに入れないことでファイルから削除
+                    if alarm_mode == "once":
+                        audio_path = alarm.get("local_file_path")
+                        if audio_path and os.path.exists(audio_path):
+                            try:
+                                os.remove(audio_path)
+                            except Exception as e:
+                                print(f"⚠️ 1回きりアラーム音声ファイル削除エラー: {e}")
+                        continue  # 削除するためリストに追加せずスキップ
+
+                new_alarm_list.append(alarm)
+
+            if guild_updated:
+                data[guild_id_str] = new_alarm_list
+
+        if updated:
+            self.save_data(data)
 
     @check_alarms.before_loop
     async def before_check_alarms(self):
@@ -302,7 +354,6 @@ class Alarm(commands.Cog):
                 color=0xED4245,
             )
             view = AlarmStopView(cog=self, guild=guild)
-            # ボイスチャンネル自身のテキストチャット機能へ直接送信
             await vc_channel.send(embed=embed, view=view)
         except Exception as e:
             print(f"⚠️ VCテキストメッセージ送信エラー: {e}")
