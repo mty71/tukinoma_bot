@@ -22,29 +22,47 @@
     </form>
   </section>
 
-  <section class="space-y-4">
-    <h2 class="text-lg font-semibold flex items-center gap-2">
-      <i data-lucide="list" class="text-brand-500"></i> 登録済みVC通知設定
-    </h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {% if vc_settings %}
-        {% for guild_id, vcs in vc_settings.items() %}
-          {% for vc_id, conf in vcs.items() %}
-            <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
-              <div>
-                <div class="font-bold text-sm">🔊 VC: {{ vc_id }}</div>
-                <div class="text-xs text-slate-400">└ 通知先: {{ conf.notify_channel_id }}</div>
-                <div class="text-xs text-slate-400">└ メンション: {{ conf.mention_type }}</div>
-              </div>
-              <button type="button" onclick="deleteItem('/api/vc/delete', '{{ guild_id }}', '{{ vc_id }}', 'vc_id')" class="p-2 text-rose-400 hover:bg-rose-500/10 rounded-xl transition">
-                <i data-lucide="trash-2" class="w-5 h-5"></i>
-              </button>
+<!-- 登録済みVC通知設定一覧 -->
+<section class="space-y-4">
+  <h2 class="text-lg font-semibold flex items-center gap-2 text-white">
+    <i data-lucide="list-tree" class="text-brand-500"></i> 登録済みVC通知設定
+  </h2>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    {% set guild_vc_data = vc_settings.get(current_guild.id) if vc_settings else None %}
+    {% if guild_vc_data and guild_vc_data.items()|length > 0 %}
+      {% for vc_id, conf in guild_vc_data.items() %}
+        <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+          <div class="space-y-1">
+            <div class="font-bold text-white flex items-center gap-2 text-sm">
+              <i data-lucide="volume-2" class="w-4 h-4 text-brand-500"></i>
+              VC: <span class="font-mono">{{ vc_id }}</span>
             </div>
-          {% endfor %}
-        {% endfor %}
-      {% else %}
-        <p class="text-slate-500 text-sm">設定はありません</p>
-      {% endif %}
-    </div>
-  </section>
+            <div class="text-xs text-slate-400 space-y-1 pl-6">
+              <p>└ 通知先: <span class="text-slate-200 font-mono">{{ conf.notify_channel_id }}</span></p>
+              <p>└ メンション: 
+                <span class="text-slate-200">
+                  {% if conf.mention_type == 'user' %}
+                    操作した本人
+                  {% elif conf.mention_type == 'everyone' %}
+                    @everyone
+                  {% elif conf.mention_type == 'role' and conf.mention_role_id %}
+                    ロール (ID: {{ conf.mention_role_id }})
+                  {% else %}
+                    なし
+                  {% endif %}
+                </span>
+              </p>
+            </div>
+          </div>
+          <!-- 削除ボタン -->
+          <button type="button" onclick="deleteItem('/api/vc/delete', '{{ current_guild.id }}', '{{ vc_id }}', 'vc_id')" class="p-2 text-rose-400 hover:bg-rose-500/10 rounded-xl transition">
+            <i data-lucide="trash-2" class="w-5 h-5"></i>
+          </button>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="text-slate-500 text-sm col-span-2">登録されているVC通知設定はありません</p>
+    {% endif %}
+  </div>
+</section>
 </div>
