@@ -21,29 +21,60 @@
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
 
-  <!-- ヘッダーコンポーネント読み込み -->
+  <!-- ヘッダー -->
   {% include "components/header.html" %}
 
   <main class="max-w-5xl mx-auto px-4 py-8 space-y-8">
-    <!-- 各画面コンポーネント読み込み -->
-    {% include "components/alarm_section.html" %}
-    {% include "components/vc_section.html" %}
-    {% include "components/clear_section.html" %}
+    {% if is_authenticated %}
+      <!-- 🔑 ログイン済み：各機能を表示 -->
+      {% include "components/alarm_section.html" %}
+      {% include "components/vc_section.html" %}
+      {% include "components/clear_section.html" %}
+    {% else %}
+      <!-- 🔒 未ログイン：ログイン案内カードのみ表示 -->
+      <div class="max-w-md mx-auto my-16 bg-slate-900/80 border border-slate-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
+        <div class="w-16 h-16 bg-brand-500/10 text-brand-500 rounded-2xl flex items-center justify-center mx-auto">
+          <i data-lucide="shield-lock" class="w-8 h-8"></i>
+        </div>
+        <div class="space-y-2">
+          <h2 class="text-xl font-bold text-white">ログインが必要です</h2>
+          <p class="text-sm text-slate-400">
+            ダッシュボードを操作するには、Botが参加しているDiscordサーバーのアカウントでログインしてください。
+          </p>
+        </div>
+        <a href="/api/auth/login" class="inline-flex items-center justify-center gap-2 w-full py-3 bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-xl transition shadow-lg shadow-brand-500/25">
+          <i data-lucide="log-in" class="w-5 h-5"></i> Discordでログイン
+        </a>
+      </div>
+    {% endif %}
   </main>
 
   <script>
     lucide.createIcons();
 
+    // タブ切り替え処理
     function switchNav(type) {
-      document.getElementById('sectionAlarm').classList.toggle('hidden', type !== 'alarm');
-      document.getElementById('sectionVc').classList.toggle('hidden', type !== 'vc');
-      document.getElementById('sectionClear').classList.toggle('hidden', type !== 'clear');
+      const alarmSec = document.getElementById('sectionAlarm');
+      const vcSec = document.getElementById('sectionVc');
+      const clearSec = document.getElementById('sectionClear');
 
-      document.getElementById('navAlarm').className = type === 'alarm' ? 'px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-500 text-white flex items-center gap-1.5' : 'px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 flex items-center gap-1.5';
-      document.getElementById('navVc').className = type === 'vc' ? 'px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-500 text-white flex items-center gap-1.5' : 'px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 flex items-center gap-1.5';
-      document.getElementById('navClear').className = type === 'clear' ? 'px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-600 text-white flex items-center gap-1.5' : 'px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 flex items-center gap-1.5';
+      if (alarmSec) alarmSec.classList.toggle('hidden', type !== 'alarm');
+      if (vcSec) vcSec.classList.toggle('hidden', type !== 'vc');
+      if (clearSec) clearSec.classList.toggle('hidden', type !== 'clear');
+
+      const navAlarm = document.getElementById('navAlarm');
+      const navVc = document.getElementById('navVc');
+      const navClear = document.getElementById('navClear');
+
+      const activeClass = "px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-500 text-white flex items-center gap-1.5 transition";
+      const inactiveClass = "px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition";
+
+      if (navAlarm) navAlarm.className = type === 'alarm' ? activeClass : inactiveClass;
+      if (navVc) navVc.className = type === 'vc' ? activeClass : inactiveClass;
+      if (navClear) navClear.className = type === 'clear' ? (type === 'clear' ? "px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-600 text-white flex items-center gap-1.5 transition" : activeClass) : inactiveClass;
     }
 
+    // 音源選択タブ切り替え処理
     function switchSourceTab(type) {
       document.getElementById('youtubeInputGroup').classList.toggle('hidden', type !== 'youtube');
       document.getElementById('fileInputGroup').classList.toggle('hidden', type !== 'file');
