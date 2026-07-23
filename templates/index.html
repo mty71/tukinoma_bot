@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tukinoma Bot - Alarm Dashboard</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              500: '#5865F2',
+              600: '#4752C4',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-brand-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="p-2 bg-brand-500/10 rounded-xl text-brand-500">
+          <i data-lucide="alarm-clock" class="w-6 h-6"></i>
+        </div>
+        <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+          Tukinoma Alarm
+        </h1>
+      </div>
+      <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700/50">
+        Web Dashboard
+      </span>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-8 space-y-8">
+
+    <!-- アラーム新規登録カード -->
+    <section class="bg-slate-900/80 rounded-2xl p-6 border border-slate-800/80 shadow-2xl backdrop-blur-xl">
+      <div class="flex items-center gap-2 mb-6">
+        <i data-lucide="plus-circle" class="w-5 h-5 text-brand-500"></i>
+        <h2 class="text-lg font-semibold text-slate-200">新規アラーム追加</h2>
+      </div>
+
+      <form id="alarmForm" class="space-y-6" onsubmit="submitForm(event)">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- サーバーID -->
+          <div class="space-y-2">
+            <label class="text-xs font-medium text-slate-400">サーバー ID (Guild ID)</label>
+            <input type="text" name="guild_id" placeholder="123456789012345678" required
+              class="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+          </div>
+
+          <!-- VCチャンネルID -->
+          <div class="space-y-2">
+            <label class="text-xs font-medium text-slate-400">対象VC チャンネルID</label>
+            <input type="text" name="vc_id" placeholder="987654321098765432" required
+              class="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+          </div>
+
+          <!-- 再生時刻 -->
+          <div class="space-y-2">
+            <label class="text-xs font-medium text-slate-400">再生時刻 (24時間表記)</label>
+            <input type="time" name="time_str" required
+              class="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition text-slate-200">
+          </div>
+        </div>
+
+        <!-- 音源選択タブ -->
+        <div class="space-y-3">
+          <label class="text-xs font-medium text-slate-400">音源の指定方法</label>
+          <div class="flex gap-2 p-1 bg-slate-950/80 rounded-xl border border-slate-800/80 w-fit">
+            <button type="button" id="tabYoutube" onclick="switchSourceTab('youtube')"
+              class="px-4 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 bg-brand-500 text-white">
+              <i data-lucide="youtube" class="w-4 h-4"></i> YouTube URL
+            </button>
+            <button type="button" id="tabFile" onclick="switchSourceTab('file')"
+              class="px-4 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition flex items-center gap-2">
+              <i data-lucide="upload-cloud" class="w-4 h-4"></i> 音声ファイル
+            </button>
+          </div>
+
+          <!-- YouTube入力 -->
+          <div id="youtubeInputGroup" class="relative">
+            <input type="url" name="youtube_url" id="youtubeUrlInput" placeholder="https://www.youtube.com/watch?v=..."
+              class="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition pl-10">
+            <i data-lucide="link" class="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5"></i>
+          </div>
+
+          <!-- ファイルアップロード入力 -->
+          <div id="fileInputGroup" class="hidden">
+            <label for="audioFileInput"
+              class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-800 rounded-xl cursor-pointer bg-slate-950/40 hover:bg-slate-950/80 hover:border-brand-500/50 transition group">
+              <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                <i data-lucide="music" class="w-8 h-8 text-slate-500 group-hover:text-brand-500 transition mb-2"></i>
+                <p class="text-xs text-slate-400"><span class="font-semibold text-slate-300">クリックしてファイルを選択</span> またはドラッグ＆ドロップ</p>
+                <p class="text-[10px] text-slate-500 mt-1">MP3, WAV, OG, FLAC など</p>
+                <p id="fileNameDisplay" class="text-xs font-medium text-brand-500 mt-2 hidden"></p>
+              </div>
+              <input type="file" name="audio_file" id="audioFileInput" accept="audio/*" class="hidden" onchange="updateFileName(this)">
+            </label>
+          </div>
+        </div>
+
+        <!-- 送信ボタン -->
+        <button type="submit" id="submitBtn"
+          class="w-full bg-brand-500 hover:bg-brand-600 text-white font-medium py-3 rounded-xl transition duration-200 flex items-center justify-center gap-2 shadow-lg shadow-brand-500/20 active:scale-[0.99]">
+          <i data-lucide="check" class="w-4 h-4"></i> アラームを保存・登録する
+        </button>
+      </form>
+    </section>
+
+    <!-- 登録済みアラーム一覧 -->
+    <section class="space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-slate-200 flex items-center gap-2">
+          <i data-lucide="list-music" class="w-5 h-5 text-brand-500"></i> 登録済みアラーム一覧
+        </h2>
+      </div>
+
+      <div id="alarmList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {% if alarms %}
+          {% for guild_id, list in alarms.items() %}
+            {% for alarm in list %}
+              <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex items-center justify-between gap-4 hover:border-slate-700/80 transition shadow-sm">
+                <div class="flex items-center gap-4">
+                  <div class="text-3xl font-bold font-mono tracking-tight text-white bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800/80">
+                    {{ alarm.time }}
+                  </div>
+                  <div class="space-y-1">
+                    <div class="text-xs text-slate-400 flex items-center gap-1">
+                      <i data-lucide="hash" class="w-3 h-3"></i> VC: <span class="font-mono text-slate-300">{{ alarm.vc_channel_id }}</span>
+                    </div>
+                    <div class="text-xs text-slate-500 truncate max-w-[200px]" title="{{ alarm.local_file_path }}">
+                      📁 {{ alarm.local_file_path.split('/')[-1] }}
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2.5 py-1 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    有効
+                  </span>
+                </div>
+              </div>
+            {% endfor %}
+          {% endfor %}
+        {% else %}
+          <div class="col-span-full border border-dashed border-slate-800 rounded-2xl p-12 text-center text-slate-500">
+            <i data-lucide="clock-alert" class="w-8 h-8 mx-auto mb-3 opacity-50"></i>
+            登録されているアラームはありません
+          </div>
+        {% endif %}
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // Lucideアイコン初期化
+    lucide.createIcons();
+
+    // 音源切り替えタブ
+    function switchSourceTab(type) {
+      const tabYt = document.getElementById('tabYoutube');
+      const tabFile = document.getElementById('tabFile');
+      const groupYt = document.getElementById('youtubeInputGroup');
+      const groupFile = document.getElementById('fileInputGroup');
+
+      if (type === 'youtube') {
+        tabYt.className = 'px-4 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 bg-brand-500 text-white';
+        tabFile.className = 'px-4 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition flex items-center gap-2';
+        groupYt.classList.remove('hidden');
+        groupFile.classList.add('hidden');
+      } else {
+        tabFile.className = 'px-4 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 bg-brand-500 text-white';
+        tabYt.className = 'px-4 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 transition flex items-center gap-2';
+        groupFile.classList.remove('hidden');
+        groupYt.classList.add('hidden');
+      }
+    }
+
+    // アップロードファイル名の表示
+    function updateFileName(input) {
+      const display = document.getElementById('fileNameDisplay');
+      if (input.files && input.files[0]) {
+        display.textContent = `選択中: ${input.files[0].name}`;
+        display.classList.remove('hidden');
+      }
+    }
+
+    // フォーム送信 (API連携)
+    async function submitForm(e) {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> ダウンロード・登録処理中...`;
+      lucide.createIcons();
+
+      const formData = new FormData(e.target);
+
+      try {
+        const res = await fetch('/api/alarm/add', {
+          method: 'POST',
+          body: formData
+        });
+        const result = await res.json();
+
+        if (result.status === 'ok') {
+          alert('✅ アラームを登録しました！');
+          window.location.reload();
+        } else {
+          alert('❌ 登録に失敗しました');
+        }
+      } catch (err) {
+        alert('❌ エラーが発生しました: ' + err);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> アラームを保存・登録する`;
+        lucide.createIcons();
+      }
+    }
+  </script>
+</body>
+</html>
