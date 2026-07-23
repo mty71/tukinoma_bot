@@ -28,9 +28,12 @@ async def on_ready():
     print(f" ログイン成功: {bot.user.name} (ID: {bot.user.id})")
     print("====================================")
 
+    # 参加中のすべてのサーバーに対してコマンドを強制同期
     try:
-        synced = await bot.tree.sync()
-        print(f"✅ {len(synced)} 個のスラッシュコマンドを同期しました")
+        for guild in bot.guilds:
+            bot.tree.copy_global_to(guild=guild)
+            synced = await bot.tree.sync(guild=guild)
+            print(f"✅ {guild.name} (ID: {guild.id}) に {len(synced)} 個のコマンドを同期しました")
     except Exception as e:
         print(f"❌ コマンド同期エラー: {e}")
 
