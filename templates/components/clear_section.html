@@ -1,0 +1,18 @@
+<div id="sectionClear" class="space-y-8 hidden">
+  <section class="bg-slate-900/80 rounded-2xl p-6 border border-slate-800 max-w-xl mx-auto">
+    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2 text-rose-400">
+      <i data-lucide="trash-2"></i> メッセージ一括削除
+    </h2>
+    <form onsubmit="submitClear(event)" class="space-y-4">
+      <div class="space-y-2">
+        <label class="text-xs text-slate-400">対象テキストチャンネル ID</label>
+        <input type="text" name="channel_id" required placeholder="333333333333333333" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
+      </div>
+      <div class="space-y-2">
+        <label class="text-xs text-slate-400">削除件数 (1〜100件)</label>
+        <input type="number" name="amount" min="1" max="100" value="10" required class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
+      </div>
+      <button type="submit" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-medium py-2.5 rounded-xl text-sm transition">一括削除を実行する</button>
+    </form>
+  </section>
+</div>

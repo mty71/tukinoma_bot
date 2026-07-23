@@ -1,0 +1,55 @@
+<div id="sectionAlarm" class="space-y-8">
+  <!-- アラーム新規追加フォーム -->
+  <section class="bg-slate-900/80 rounded-2xl p-6 border border-slate-800">
+    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+      <i data-lucide="plus-circle" class="text-brand-500"></i> アラーム新規追加
+    </h2>
+    <form onsubmit="submitForm(event, '/api/alarm/add')" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <input type="text" name="guild_id" placeholder="サーバー ID" required class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
+        <input type="text" name="vc_id" placeholder="対象VC ID" required class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
+        <input type="time" name="time_str" required class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm text-slate-200">
+      </div>
+      <div class="space-y-2">
+        <div class="flex gap-2">
+          <button type="button" onclick="switchSourceTab('youtube')" id="tabYoutube" class="px-3 py-1 rounded-lg text-xs bg-brand-500 text-white">YouTube</button>
+          <button type="button" onclick="switchSourceTab('file')" id="tabFile" class="px-3 py-1 rounded-lg text-xs text-slate-400">ファイル</button>
+        </div>
+        <input type="url" name="youtube_url" id="youtubeInputGroup" placeholder="https://www.youtube.com/watch?v=..." class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
+        <input type="file" name="audio_file" id="fileInputGroup" accept="audio/*" class="hidden w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
+      </div>
+      <button type="submit" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-medium py-2.5 rounded-xl text-sm">登録する</button>
+    </form>
+  </section>
+
+  <!-- 登録済みアラーム一覧 -->
+  <section class="space-y-4">
+    <h2 class="text-lg font-semibold flex items-center gap-2">
+      <i data-lucide="list-music" class="text-brand-500"></i> 登録済みアラーム
+    </h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {% if alarms %}
+        {% for guild_id, list in alarms.items() %}
+          {% for alarm in list %}
+            <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+              <div>
+                <div class="text-2xl font-bold font-mono">{{ alarm.time }}</div>
+                <div class="text-xs text-slate-400">VC: {{ alarm.vc_channel_id }}</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="stopAlarm('{{ guild_id }}')" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow-lg shadow-rose-600/20">
+                  <i data-lucide="square" class="w-3.5 h-3.5 fill-current"></i> 止める
+                </button>
+                <button type="button" onclick="deleteItem('/api/alarm/delete', '{{ guild_id }}', '{{ alarm.id }}', 'alarm_id')" class="p-2 text-rose-400 hover:bg-rose-500/10 rounded-xl transition">
+                  <i data-lucide="trash-2" class="w-5 h-5"></i>
+                </button>
+              </div>
+            </div>
+          {% endfor %}
+        {% endfor %}
+      {% else %}
+        <p class="text-slate-500 text-sm">アラームはありません</p>
+      {% endif %}
+    </div>
+  </section>
+</div>

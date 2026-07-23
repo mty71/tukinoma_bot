@@ -1,0 +1,50 @@
+<div id="sectionVc" class="space-y-8 hidden">
+  <section class="bg-slate-900/80 rounded-2xl p-6 border border-slate-800">
+    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+      <i data-lucide="settings" class="text-brand-500"></i> VC通知設定 追加・更新
+    </h2>
+    <form onsubmit="submitForm(event, '/api/vc/add')" class="space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <input type="text" name="guild_id" placeholder="サーバー ID" required class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
+        <input type="text" name="vc_id" placeholder="監視対象VC ID" required class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
+        <input type="text" name="text_channel_id" placeholder="通知先テキストチャンネル ID" required class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <select name="mention_type" class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
+          <option value="none">メンションなし</option>
+          <option value="user">本人</option>
+          <option value="everyone">@everyone</option>
+          <option value="role">特定ロール</option>
+        </select>
+        <input type="text" name="mention_role_id" placeholder="対象ロール ID (role選択時のみ)" class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-sm">
+      </div>
+      <button type="submit" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-medium py-2.5 rounded-xl text-sm">設定を保存する</button>
+    </form>
+  </section>
+
+  <section class="space-y-4">
+    <h2 class="text-lg font-semibold flex items-center gap-2">
+      <i data-lucide="list" class="text-brand-500"></i> 登録済みVC通知設定
+    </h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {% if vc_settings %}
+        {% for guild_id, vcs in vc_settings.items() %}
+          {% for vc_id, conf in vcs.items() %}
+            <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+              <div>
+                <div class="font-bold text-sm">🔊 VC: {{ vc_id }}</div>
+                <div class="text-xs text-slate-400">└ 通知先: {{ conf.notify_channel_id }}</div>
+                <div class="text-xs text-slate-400">└ メンション: {{ conf.mention_type }}</div>
+              </div>
+              <button type="button" onclick="deleteItem('/api/vc/delete', '{{ guild_id }}', '{{ vc_id }}', 'vc_id')" class="p-2 text-rose-400 hover:bg-rose-500/10 rounded-xl transition">
+                <i data-lucide="trash-2" class="w-5 h-5"></i>
+              </button>
+            </div>
+          {% endfor %}
+        {% endfor %}
+      {% else %}
+        <p class="text-slate-500 text-sm">設定はありません</p>
+      {% endif %}
+    </div>
+  </section>
+</div>
