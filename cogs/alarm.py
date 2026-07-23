@@ -26,10 +26,8 @@ class AlarmStopView(discord.ui.View):
     async def stop_button(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        # アラームを停止
         stopped = await self.cog.stop_alarm_for_guild(self.guild)
 
-        # ボタンを無効化してメッセージを更新
         button.disabled = True
         button.label = "停止済み"
         button.style = discord.ButtonStyle.secondary
@@ -295,32 +293,19 @@ class Alarm(commands.Cog):
     async def before_check_alarms(self):
         await self.bot.wait_until_ready()
 
-    # 停止ボタン付きメッセージの送信ヘルパー
+    # 🛑 対象VC内テキストチャットへ停止ボタンメッセージを送信
     async def send_alarm_message(self, guild: discord.Guild, vc_channel: discord.VoiceChannel, alarm: dict):
-        # vc_notifier の設定を参照して通知先チャンネルを取得（無ければシステムチャンネルや最初のテキストチャンネル）
-        vc_notifier_data = self.bot.config_manager.load("vc_notifier")
-        guild_id_str = str(guild.id)
-        vc_id_str = str(vc_channel.id)
-
-        target_text_channel = None
-        if guild_id_str in vc_notifier_data and vc_id_str in vc_notifier_data[guild_id_str]:
-            notify_ch_id = vc_notifier_data[guild_id_str][vc_id_str].get("notify_channel_id")
-            if notify_ch_id:
-                target_text_channel = guild.get_channel(notify_ch_id)
-
-        if not target_text_channel:
-            target_text_channel = guild.system_channel or next(
-                (ch for ch in guild.text_channels if ch.permissions_for(guild.me).send_messages), None
-            )
-
-        if target_text_channel:
+        try:
             embed = discord.Embed(
                 title="⏰ アラームが鳴っています！",
                 description=f"<#{vc_channel.id}> で指定時刻 (`{alarm.get('time')}`) の音楽を再生中です。\n下のボタンを押すとアラームを停止します。",
                 color=0xED4245,
             )
             view = AlarmStopView(cog=self, guild=guild)
-            await target_text_channel.send(embed=embed, view=view)
+            # ボイスチャンネル自身のテキストチャット機能へ直接送信
+            await vc_channel.send(embed=embed, view=view)
+        except Exception as e:
+            print(f"⚠️ VCテキストメッセージ送信エラー: {e}")
 
     # 無限ループ再生ロジック
     async def play_alarm_loop(self, guild: discord.Guild, alarm: dict):
@@ -343,7 +328,7 @@ class Alarm(commands.Cog):
 
         self.active_alarms[guild.id] = True
 
-        # アラームメッセージと停止ボタンを通知チャンネルに送信
+        # 対象VCのチャット欄にボタンを送信
         await self.send_alarm_message(guild, vc_channel, alarm)
 
         while self.active_alarms.get(guild.id, False) and voice_client.is_connected():
