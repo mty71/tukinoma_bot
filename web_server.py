@@ -4,7 +4,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 
+# 1. auth_router のインポートを追加
 from routes.alarm_api import router as alarm_router
+from routes.auth_api import router as auth_router
 from routes.moderation_api import router as moderation_router
 from routes.ui import router as ui_router
 from routes.vc_api import router as vc_router
@@ -13,12 +15,13 @@ load_dotenv()
 
 app = FastAPI()
 
-# テンプレートとBotインスタンスを app.state に持たせてルーター側から参照可能にする
+# テンプレートを app.state に保持
 templates = Jinja2Templates(directory="templates")
 app.state.templates = templates
 
-# 各ルーターの読み込み
+# 2. auth_router をアプリに登録
 app.include_router(ui_router)
+app.include_router(auth_router)  # ← 追加しました！
 app.include_router(alarm_router)
 app.include_router(vc_router)
 app.include_router(moderation_router)
