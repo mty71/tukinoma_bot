@@ -68,9 +68,17 @@ async def callback(request: Request, code: str):
     bot_guild_ids = {str(guild.id) for guild in bot_instance.guilds}
     common_guild_ids = user_guild_ids.intersection(bot_guild_ids)
 
+    # ❌ Botが参加しているサーバーに所属していない場合
     if not common_guild_ids:
-        err = quote("Botが参加しているサーバーに所属していません。")
-        return RedirectResponse(f"/?error={err}")
+        err = quote(
+            "Botが参加しているサーバーに所属していません。対象のDiscordサーバーに参加してから再度ログインしてください。"
+        )
+        response = RedirectResponse(url=f"/?error={err}", status_code=303)
+        # 保持している可能性のあるCookieを確実に削除する
+        response.delete_cookie("user_id")
+        response.delete_cookie("username")
+        response.delete_cookie("managed_guilds")
+        return response
 
     # 共通サーバーのデータを整理（名前、アイコン、管理者フラグを含める）
     managed_guilds = []
@@ -79,18 +87,26 @@ async def callback(request: Request, code: str):
     for g in user_guilds:
         if g["id"] in common_guild_ids:
             perms = int(g.get("permissions", 0))
-            is_admin = bool(g.get("owner") or (perms & ADMINISTRATOR_BIT) == ADMINISTRATOR_BIT)
-            
+            is_admin = bool(
+                g.get("owner") or (perms & ADMINISTRATOR_BIT) == ADMINISTRATOR_BIT
+            )
+
             # アイコンURLの生成
             icon_hash = g.get("icon")
-            icon_url = f"https://cdn.discordapp.com/icons/{g['id']}/{icon_hash}.png" if icon_hash else None
+            icon_url = (
+                f"https://cdn.discordapp.com/icons/{g['id']}/{icon_hash}.png"
+                if icon_hash
+                else None
+            )
 
-            managed_guilds.append({
-                "id": g["id"],
-                "name": g["name"],
-                "icon": icon_url,
-                "is_admin": is_admin
-            })
+            managed_guilds.append(
+                {
+                    "id": g["id"],
+                    "name": g["name"],
+                    "icon": icon_url,
+                    "is_admin": is_admin,
+                }
+            )
 
     user_res = requests.get(
         "https://discord.com/api/v10/users/@me",
@@ -98,17 +114,29 @@ async def callback(request: Request, code: str):
     )
     user_data = user_res.json()
 
-    response = RedirectResponse(url="/")
-    response.set_cookie(key="user_id", value=user_data["id"], max_age=86400, httponly=True)
-    response.set_cookie(key="username", value=user_data["username"], max_age=86400, httponly=True)
-    response.set_cookie(key="managed_guilds", value=json.dumps(managed_guilds), max_age=86400, httponly=True)
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(
+        key="user_id", value=user_data["id"], max_age=86400, httponly=True
+    )
+    response.set_cookie(
+        key="username",
+        value=user_data["username"],
+        max_age=86400,
+        httponly=True,
+    )
+    response.set_cookie(
+        key="managed_guilds",
+        value=json.dumps(managed_guilds),
+        max_age=86400,
+        httponly=True,
+    )
 
     return response
 
 
 @router.get("/logout")
 async def logout():
-    response = RedirectResponse(url="/")
+    response = RedirectResponse(url="/", status_code=303)
     response.delete_cookie("user_id")
     response.delete_cookie("username")
     response.delete_cookie("managed_guilds")
