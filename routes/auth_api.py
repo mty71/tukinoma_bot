@@ -1,117 +1,139 @@
+import json
 import os
-import uuid
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
-from utils.audio_downloader import AudioDownloader
-from utils.config_manager import ConfigManager
+from urllib.parse import quote
+import requests
+from dotenv import load_dotenv
+from fastapi import APIRouter, Request
+from fastapi.responses import RedirectResponse
 
-router = APIRouter(prefix="/api/alarm", tags=["Alarm API"])
-config_manager = ConfigManager()
-downloader = AudioDownloader()
+load_dotenv()
+
+router = APIRouter(prefix="/api/auth", tags=["Auth"])
+
+CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
+CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
+REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI")
 
 
-@router.post("/add")
-async def add_alarm(
-    request: Request,
-    guild_id: str = Form(...),
-    vc_id: str = Form(...),  # HTMLフォームの name="vc_id" に合わせます
-    time_str: str = Form(...),  # HTMLフォームの name="time_str" に合わせます
-    mode: str = Form("repeat"),  # 🔑 モードを受け取り (デフォルト: repeat)
-    youtube_url: str = Form(None),
-    audio_file: UploadFile = File(None),
-):
-    # ユーザー権限チェック（Cookie確認など必要に応じて調整）
-    user_id = request.cookies.get("user_id")
-    if not user_id:
-        raise HTTPException(
-            status_code=401, detail="ログインが必要です。"
-        )
+@router.get("/login")
+async def login():
+    discord_login_url = (
+        f"https://discord.com/api/oauth2/authorize"
+        f"?client_id={CLIENT_ID}"
+        f"&redirect_uri={REDIRECT_URI}"
+        f"&response_type=code"
+        f"&scope=identify%20guilds"
+    )
+    return RedirectResponse(discord_login_url)
 
-    alarms = config_manager.load("alarms")
-    if guild_id not in alarms:
-        alarms[guild_id] = []
 
-    alarm_id = f"alarm_{uuid.uuid4().hex[:8]}"
-    local_path = ""
+@router.get("/callback")
+async def callback(request: Request, code: str):
+    bot_instance = getattr(request.app.state, "bot", None)
+    if not bot_instance:
+        err = quote("Botが接続されていません")
+        return RedirectResponse(f"/?error={err}")
 
-    # 音声ファイルの保存処理
-    if audio_file and audio_file.filename:
-        os.makedirs("data/audio", exist_ok=True)
-        local_path = f"data/audio/{alarm_id}_{audio_file.filename}"
-        contents = await audio_file.read()
-        with open(local_path, "wb") as f:
-            f.write(contents)
-    elif youtube_url:
-        local_path = downloader.download_youtube_audio(
-            youtube_url, alarm_id
-        )
-
-    if not local_path:
-        raise HTTPException(
-            status_code=400, detail="音源を指定してください。"
-        )
-
-    # 🔑 保存データの構築 (mode と last_triggered を追加)
-    new_alarm = {
-        "id": alarm_id,
-        "time": time_str,
-        "mode": mode,  # "repeat" または "once"
-        "vc_channel_id": int(vc_id),
-        "local_file_path": local_path,
-        "enabled": True,
-        "last_triggered": None,  # 同一分内の重複発火防止用
+    data = {
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": REDIRECT_URI,
     }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
-    alarms[guild_id].append(new_alarm)
-    config_manager.save("alarms", alarms)
+    token_res = requests.post(
+        "https://discord.com/api/v10/oauth2/token",
+        data=data,
+        headers=headers,
+    )
+    if token_res.status_code != 200:
+        err = quote("アクセストークンの取得に失敗しました")
+        return RedirectResponse(f"/?error={err}")
 
-    return JSONResponse(
-        content={
-            "status": "success",
-            "message": "アラームを保存しました。",
-        }
+    access_token = token_res.json().get("access_token")
+
+    guilds_res = requests.get(
+        "https://discord.com/api/v10/users/@me/guilds",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    if guilds_res.status_code != 200:
+        err = quote("所属サーバー情報の取得に失敗しました")
+        return RedirectResponse(f"/?error={err}")
+
+    user_guilds = guilds_res.json()
+    user_guild_ids = {g["id"] for g in user_guilds}
+
+    bot_guild_ids = {str(guild.id) for guild in bot_instance.guilds}
+    common_guild_ids = user_guild_ids.intersection(bot_guild_ids)
+
+    if not common_guild_ids:
+        err = quote(
+            "Botが参加しているサーバーに所属していません。対象のDiscordサーバーに参加してから再度ログインしてください。"
+        )
+        response = RedirectResponse(url=f"/?error={err}", status_code=303)
+        response.delete_cookie("user_id")
+        response.delete_cookie("username")
+        response.delete_cookie("managed_guilds")
+        return response
+
+    managed_guilds = []
+    ADMINISTRATOR_BIT = 0x8
+
+    for g in user_guilds:
+        if g["id"] in common_guild_ids:
+            perms = int(g.get("permissions", 0))
+            is_admin = bool(
+                g.get("owner") or (perms & ADMINISTRATOR_BIT) == ADMINISTRATOR_BIT
+            )
+
+            icon_hash = g.get("icon")
+            icon_url = (
+                f"https://cdn.discordapp.com/icons/{g['id']}/{icon_hash}.png"
+                if icon_hash
+                else None
+            )
+
+            managed_guilds.append(
+                {
+                    "id": g["id"],
+                    "name": g["name"],
+                    "icon": icon_url,
+                    "is_admin": is_admin,
+                }
+            )
+
+    user_res = requests.get(
+        "https://discord.com/api/v10/users/@me",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    user_data = user_res.json()
+
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(
+        key="user_id", value=user_data["id"], max_age=86400, httponly=True
+    )
+    response.set_cookie(
+        key="username",
+        value=user_data["username"],
+        max_age=86400,
+        httponly=True,
+    )
+    response.set_cookie(
+        key="managed_guilds",
+        value=json.dumps(managed_guilds),
+        max_age=86400,
+        httponly=True,
     )
 
+    return response
 
-@router.post("/delete")
-async def delete_alarm(
-    request: Request,
-    guild_id: str = Form(...),
-    alarm_id: str = Form(...),
-):
-    alarms = config_manager.load("alarms")
-    if guild_id not in alarms:
-        return JSONResponse(
-            content={"status": "error", "message": "対象のサーバーがありません。"}
-        )
 
-    target_alarm = None
-    new_list = []
-    for alarm in alarms[guild_id]:
-        if alarm.get("id") == alarm_id:
-            target_alarm = alarm
-        else:
-            new_list.append(alarm)
-
-    if not target_alarm:
-        return JSONResponse(
-            content={
-                "status": "error",
-                "message": "指定されたアラームが見つかりません。",
-            }
-        )
-
-    alarms[guild_id] = new_list
-    config_manager.save("alarms", alarms)
-
-    # 音声ファイルの削除
-    audio_path = target_alarm.get("local_file_path")
-    if audio_path and os.path.exists(audio_path):
-        try:
-            os.remove(audio_path)
-        except Exception as e:
-            print(f"⚠️ ファイル削除エラー: {e}")
-
-    return JSONResponse(
-        content={"status": "success", "message": "アラームを削除しました。"}
-    )
+@router.get("/logout")
+async def logout():
+    response = RedirectResponse(url="/", status_code=303)
+    response.delete_cookie("user_id")
+    response.delete_cookie("username")
+    response.delete_cookie("managed_guilds")
+    return response
