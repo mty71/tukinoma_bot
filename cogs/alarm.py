@@ -5,6 +5,15 @@ import uuid
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
+
+# JST (日本時間) の定義
+try:
+    import zoneinfo
+    JST = zoneinfo.ZoneInfo("Asia/Tokyo")
+except ImportError:
+    import pytz
+    JST = pytz.timezone("Asia/Tokyo")
+
 from utils.audio_downloader import AudioDownloader
 
 
@@ -129,7 +138,7 @@ class AlarmGroup(app_commands.Group):
                 "vc_channel_id": vc.id,
                 "local_file_path": local_path,
                 "enabled": True,
-                "last_triggered": None,  # 重複発火防止用
+                "last_triggered": None,
             }
         )
         self.cog.save_data(data)
@@ -282,13 +291,14 @@ class Alarm(commands.Cog):
         return False
 
     # ====================================================
-    # 🔑 トリガー部分（アラーム監視・自動削除・重複発火防止ループ）
+    # 🔑 アラーム監視・自動削除・重複発火防止ループ（JST固定版）
     # ====================================================
-    @tasks.loop(seconds=10)
+    @tasks.loop(seconds=5)
     async def check_alarms(self):
-        now = datetime.datetime.now()
-        current_time = now.strftime("%H:%M")  # 例: "14:30"
-        current_date = now.strftime("%Y-%m-%d")  # 例: "2026-07-23"
+        # 🔑 日本時間 (JST) で現在時刻を取得
+        now = datetime.datetime.now(JST)
+        current_time = now.strftime("%H:%M")     # 例: "14:30"
+        current_date = now.strftime("%Y-%m-%d") # 例: "2026-07-23"
 
         data = self.get_data()
         updated = False
@@ -310,20 +320,20 @@ class Alarm(commands.Cog):
                 alarm_mode = alarm.get("mode", "repeat")
                 last_triggered = alarm.get("last_triggered")
 
-                # 【トリガー条件】時刻一致かつ、本日この分にまだ発火していない場合のみ
+                # 【トリガー判定】
+                # 時刻が一致し、かつ本日の日付と last_triggered が異なる場合のみ発火
                 if current_time == alarm_time and last_triggered != current_date:
-                    # 再生中でなければ起動
                     if not self.active_alarms.get(guild.id, False):
                         self.bot.loop.create_task(
                             self.play_alarm_loop(guild, alarm)
                         )
 
-                    # 本日発火済みにマーク（これにより止めても同じ分の間に再発火するバグを防ぎます）
+                    # 発火済みフラグとして「今日の日付 (YYYY-MM-DD)」をセット
                     alarm["last_triggered"] = current_date
                     guild_updated = True
                     updated = True
 
-                    # 【自動削除】1回のみ（once）の場合はリストに入れないことでファイルから削除
+                    # 1回のみ（once）の場合は保存リストから外す（削除）
                     if alarm_mode == "once":
                         audio_path = alarm.get("local_file_path")
                         if audio_path and os.path.exists(audio_path):
@@ -331,7 +341,7 @@ class Alarm(commands.Cog):
                                 os.remove(audio_path)
                             except Exception as e:
                                 print(f"⚠️ 1回きりアラーム音声ファイル削除エラー: {e}")
-                        continue  # 削除するためリストに追加せずスキップ
+                        continue  # 新しいリストに入れないことで削除
 
                 new_alarm_list.append(alarm)
 
