@@ -33,6 +33,18 @@
     {% else %}
       <!-- 🔒 未ログイン：ログイン案内カードのみ表示 -->
       <div class="max-w-md mx-auto my-16 bg-slate-900/80 border border-slate-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
+        
+        <!-- ⚠️ エラーメッセージがある場合にUI枠を表示 -->
+        {% if error_message %}
+          <div class="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-2xl text-xs text-left flex items-start gap-3">
+            <i data-lucide="alert-triangle" class="w-5 h-5 shrink-0 mt-0.5 text-rose-500"></i>
+            <div>
+              <div class="font-bold mb-0.5">認証エラー</div>
+              <div>{{ error_message }}</div>
+            </div>
+          </div>
+        {% endif %}
+
         <div class="w-16 h-16 bg-brand-500/10 text-brand-500 rounded-2xl flex items-center justify-center mx-auto">
           <i data-lucide="shield-lock" class="w-8 h-8"></i>
         </div>
@@ -71,7 +83,7 @@
 
       if (navAlarm) navAlarm.className = type === 'alarm' ? activeClass : inactiveClass;
       if (navVc) navVc.className = type === 'vc' ? activeClass : inactiveClass;
-      if (navClear) navClear.className = type === 'clear' ? (type === 'clear' ? "px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-600 text-white flex items-center gap-1.5 transition" : activeClass) : inactiveClass;
+      if (navClear) navClear.className = type === 'clear' ? "px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-600 text-white flex items-center gap-1.5 transition" : inactiveClass;
     }
 
     // 音源選択タブ切り替え処理

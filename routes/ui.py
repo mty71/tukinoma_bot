@@ -8,7 +8,7 @@ config_manager = ConfigManager()
 
 
 @router.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+async def index(request: Request, error: str = None):
     templates = request.app.state.templates
 
     user_id = request.cookies.get("user_id")
@@ -18,11 +18,9 @@ async def index(request: Request):
     is_authenticated = user_id is not None
     user_guilds = json.loads(user_guilds_raw) if user_guilds_raw else []
 
-    # 全設定データのロード
     all_alarms = config_manager.load("alarms")
     all_vc_settings = config_manager.load("vc_notifier")
 
-    # 🔑 ログイン中のユーザーが参加しているサーバーのデータだけを抽出 (フィルタリング)
     filtered_alarms = {}
     filtered_vc_settings = {}
 
@@ -39,9 +37,10 @@ async def index(request: Request):
         request=request,
         name="index.html",
         context={
-            "alarms": filtered_alarms,  # フィルタリング後のデータを渡す
+            "alarms": filtered_alarms,
             "vc_settings": filtered_vc_settings,
             "is_authenticated": is_authenticated,
             "username": username,
+            "error_message": error,  # ← エラーメッセージをテンプレートへ渡す
         },
     )
