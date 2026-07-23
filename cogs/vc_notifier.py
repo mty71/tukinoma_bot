@@ -4,38 +4,20 @@ from discord import app_commands
 from discord.ext import commands
 
 
-class VCNotifier(commands.Cog):
-    FEATURE_NAME = "vc_notifier"  # このCog専用のデータキー (data/vc_notifier.json に保存されます)
+# /vc のグループコマンドを定義
+class VCGroup(app_commands.Group):
 
-    def __init__(self, bot):
-        self.bot = bot
-
-    def get_data(self) -> dict:
-        """設定マネージャー経由でデータを読み込み"""
-        return self.bot.config_manager.load(self.FEATURE_NAME)
-
-    def save_data(self, data: dict) -> None:
-        """設定マネージャー経由でデータを保存"""
-        self.bot.config_manager.save(self.FEATURE_NAME, data)
-
-    def get_mention_text(self, member: discord.Member, vc_setting: dict) -> str:
-        m_type = vc_setting.get("mention_type", "none")
-        if m_type == "user":
-            return f"<@{member.id}> "
-        elif m_type == "everyone":
-            return "@everyone "
-        elif m_type == "role":
-            role_id = vc_setting.get("mention_role_id")
-            if role_id:
-                return f"<@&{role_id}> "
-        return ""
+    def __init__(self, cog: "VCNotifier"):
+        super().__init__(
+            name="vc", description="VC通知機能に関するコマンド群"
+        )
+        self.cog = cog
 
     # ----------------------------------------------------
-    # 1. 設定追加コマンド (/vc_add)
+    # 1. 設定追加・更新 (/vc add)
     # ----------------------------------------------------
     @app_commands.command(
-        name="vc_add",
-        description="監視するVCと通知先の設定を追加・更新します",
+        name="add", description="監視するVCと通知先の設定を追加・更新します"
     )
     @app_commands.describe(
         vc="監視したいボイスチャンネル",
@@ -53,7 +35,7 @@ class VCNotifier(commands.Cog):
             app_commands.Choice(name="特定のロールをメンション", value="role"),
         ]
     )
-    async def vc_add(
+    async def add(
         self,
         interaction: discord.Interaction,
         vc: discord.VoiceChannel,
@@ -69,7 +51,7 @@ class VCNotifier(commands.Cog):
 
         guild_id = str(interaction.guild_id)
         vc_id_str = str(vc.id)
-        data = self.get_data()
+        data = self.cog.get_data()
 
         if guild_id not in data:
             data[guild_id] = {}
@@ -81,7 +63,7 @@ class VCNotifier(commands.Cog):
                 role_to_mention.id if role_to_mention else None
             ),
         }
-        self.save_data(data)
+        self.cog.save_data(data)
 
         embed = discord.Embed(
             title="⚙️ VC通知設定を追加・更新しました", color=0x57F287
@@ -103,18 +85,18 @@ class VCNotifier(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     # ----------------------------------------------------
-    # 2. 設定一覧表示コマンド (/vc_list)
+    # 2. 設定一覧表示 (/vc list)
     # ----------------------------------------------------
     @app_commands.command(
-        name="vc_list", description="現在登録されているVC通知設定の一覧を表示します"
+        name="list", description="登録されているVC通知設定の一覧を表示します"
     )
-    async def vc_list(self, interaction: discord.Interaction):
+    async def list(self, interaction: discord.Interaction):
         guild_id = str(interaction.guild_id)
-        data = self.get_data()
+        data = self.cog.get_data()
 
         if guild_id not in data or not data[guild_id]:
             await interaction.response.send_message(
-                "⚠️ 登録されている設定はありません。`/vc_add` で追加してください。",
+                "⚠️ 登録されている設定はありません。`/vc add` で追加してください。",
                 ephemeral=True,
             )
             return
@@ -148,13 +130,13 @@ class VCNotifier(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     # ----------------------------------------------------
-    # 3. 設定削除コマンド (/vc_remove)
+    # 3. 単体設定削除 (/vc remove)
     # ----------------------------------------------------
     @app_commands.command(
-        name="vc_remove", description="指定したVCの通知設定を削除します"
+        name="remove", description="指定したVCの通知設定を1つ削除します"
     )
     @app_commands.describe(vc="設定を削除したいボイスチャンネル")
-    async def vc_remove(
+    async def remove(
         self, interaction: discord.Interaction, vc: discord.VoiceChannel
     ):
         if not interaction.user.guild_permissions.administrator:
@@ -165,7 +147,7 @@ class VCNotifier(commands.Cog):
 
         guild_id = str(interaction.guild_id)
         vc_id_str = str(vc.id)
-        data = self.get_data()
+        data = self.cog.get_data()
 
         if guild_id not in data or vc_id_str not in data[guild_id]:
             await interaction.response.send_message(
@@ -174,14 +156,81 @@ class VCNotifier(commands.Cog):
             return
 
         del data[guild_id][vc_id_str]
-        self.save_data(data)
+        self.cog.save_data(data)
 
         await interaction.response.send_message(
             f"🗑️ <#{vc.id}> の通知設定を削除しました。"
         )
 
     # ----------------------------------------------------
-    # 4. イベント処理 (VC接続/切断)
+    # 4. 設定一括削除 (/vc clear)
+    # ----------------------------------------------------
+    @app_commands.command(
+        name="clear",
+        description="このサーバーのVC通知設定をすべて一括削除します",
+    )
+    async def clear(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "❌ 管理者権限が必要です。", ephemeral=True
+            )
+            return
+
+        guild_id = str(interaction.guild_id)
+        data = self.cog.get_data()
+
+        if guild_id not in data or not data[guild_id]:
+            await interaction.response.send_message(
+                "⚠️ 削除対象の設定が存在しません。", ephemeral=True
+            )
+            return
+
+        count = len(data[guild_id])
+        del data[guild_id]
+        self.cog.save_data(data)
+
+        embed = discord.Embed(
+            title="🧹 VC通知設定を全削除しました",
+            description=f"このサーバーに登録されていた **{count} 件** の設定をすべてクリアしました。",
+            color=0xED4245,
+        )
+        await interaction.response.send_message(embed=embed)
+
+
+# 本体Cog
+class VCNotifier(commands.Cog):
+    FEATURE_NAME = "vc_notifier"
+
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        # グループコマンドを登録
+        self.vc_group = VCGroup(self)
+        self.bot.tree.add_command(self.vc_group)
+
+    def cog_unload(self):
+        # Cogのアンロード時にグループコマンドを解除
+        self.bot.tree.remove_command(self.vc_group.name)
+
+    def get_data(self) -> dict:
+        return self.bot.config_manager.load(self.FEATURE_NAME)
+
+    def save_data(self, data: dict) -> None:
+        self.bot.config_manager.save(self.FEATURE_NAME, data)
+
+    def get_mention_text(self, member: discord.Member, vc_setting: dict) -> str:
+        m_type = vc_setting.get("mention_type", "none")
+        if m_type == "user":
+            return f"<@{member.id}> "
+        elif m_type == "everyone":
+            return "@everyone "
+        elif m_type == "role":
+            role_id = vc_setting.get("mention_role_id")
+            if role_id:
+                return f"<@&{role_id}> "
+        return ""
+
+    # ----------------------------------------------------
+    # イベント処理 (VC接続/切断)
     # ----------------------------------------------------
     @commands.Cog.listener()
     async def on_voice_state_update(
