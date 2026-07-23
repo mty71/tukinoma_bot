@@ -9,9 +9,7 @@ config_manager = ConfigManager()
 
 # 1. サーバー選択画面（ルート）
 @router.get("/", response_class=HTMLResponse)
-async def index(
-    request: Request, error: str = None
-):  # 🔑 error パラメータを受け取る
+async def index(request: Request, error: str = None):
     templates = request.app.state.templates
 
     user_id = request.cookies.get("user_id")
@@ -21,6 +19,7 @@ async def index(
     is_authenticated = user_id is not None
     managed_guilds = json.loads(guilds_raw) if guilds_raw else []
 
+    # 未ログインであっても、errorがあればサーバー選択（または未ログイン画面）へerror_messageとして渡す
     return templates.TemplateResponse(
         request=request,
         name="server_select.html",
@@ -28,7 +27,7 @@ async def index(
             "is_authenticated": is_authenticated,
             "username": username,
             "guilds": managed_guilds,
-            "error_message": error,  # 🔑 テンプレートへ error_message を渡す
+            "error_message": error,  # ← ここで確実に渡す
         },
     )
 
