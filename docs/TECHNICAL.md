@@ -133,7 +133,13 @@ FastAPI を使用した設定画面およびリクエスト受付APIです。
 * 指定された `vc_channel_id` へ Bot が接続（接続済みの場合は移動）。
 * `discord.FFmpegPCMAudio` を用いてローカルファイルを再生。
 * 再生終了時に自動で VC から切断 (`voice_client.disconnect()`)。
-
+### 3.4 `cogs/alarm.py` (アラーム機能)
+- **親コマンド**: `/alarm`
+- **サブコマンド**:
+  - `add`: `vc`, `time_str` (HH:MM), `youtube_url` または `audio_file` (Attachment) を受け取り登録。
+  - `list`: 現在のサーバーのアラーム一覧と ID を表示。
+  - `remove`: `alarm_id` を指定して設定および実体ファイル (`data/audio/*`) を削除。
+- **タスク処理**: `@tasks.loop(seconds=30)` で毎分 `HH:MM` を判定し、VCへ接続して `FFmpegPCMAudio` で自動再生。
 
 
 ---
