@@ -46,39 +46,66 @@
 
       {% if error_message %}
         <div class="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-2xl text-xs flex items-center gap-3">
-          <i data-lucide="alert-triangle" class="w-5 h-5 text-rose-500"></i>
+          <i data-lucide="alert-triangle" class="w-5 h-5 text-rose-500 shrink-0"></i>
           <div>{{ error_message }}</div>
         </div>
       {% endif %}
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {% for guild in guilds %}
-          <a href="/guild/{{ guild.id }}" class="group bg-slate-900/80 border border-slate-800 hover:border-brand-500/50 rounded-2xl p-5 flex items-center justify-between transition shadow-lg hover:shadow-brand-500/10">
-            <div class="flex items-center gap-4">
-              {% if guild.icon %}
-                <img src="{{ guild.icon }}" alt="{{ guild.name }}" class="w-12 h-12 rounded-2xl object-cover bg-slate-800">
-              {% else %}
-                <div class="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-400 font-bold text-lg">
-                  {{ guild.name[:1] }}
-                </div>
-              {% endif %}
-              <div>
-                <h3 class="font-bold text-white group-hover:text-brand-400 transition">{{ guild.name }}</h3>
-                <p class="text-xs text-slate-400 mt-0.5">
-                  {% if guild.is_admin %}
-                    <span class="text-amber-400 font-medium">✨ 管理者権限あり</span>
-                  {% else %}
-                    <span class="text-slate-500">一般メンバー (アラームのみ)</span>
-                  {% endif %}
-                </p>
-              </div>
+      <!-- 🔑 サーバーが1つもない場合の警告カード -->
+      {% if not guilds %}
+        <div class="max-w-md mx-auto my-8 bg-slate-900/80 border border-rose-500/30 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
+          <div class="w-16 h-16 bg-rose-500/10 text-rose-500 rounded-2xl flex items-center justify-center mx-auto">
+            <i data-lucide="server-crash" class="w-8 h-8"></i>
+          </div>
+          <div class="space-y-2">
+            <h3 class="text-lg font-bold text-white">管理可能なサーバーがありません</h3>
+            <p class="text-sm text-slate-400 leading-relaxed">
+              現在、あなたが参加しているサーバーの中に、このBotが導入されているサーバーが見つかりませんでした。
+            </p>
+          </div>
+          <div class="p-4 bg-slate-950/50 rounded-2xl border border-slate-800 text-left text-xs text-slate-300 space-y-2">
+            <div class="font-bold text-white flex items-center gap-1.5">
+              <i data-lucide="help-circle" class="w-4 h-4 text-brand-500"></i> 解決方法：
             </div>
-            <div class="w-8 h-8 rounded-xl bg-slate-800 group-hover:bg-brand-500 text-slate-400 group-hover:text-white flex items-center justify-center transition">
-              <i data-lucide="chevron-right" class="w-4 h-4"></i>
-            </div>
+            <p>1. 対象のDiscordサーバーにBotを招待してください。</p>
+            <p>2. Botを導入したアカウントで再度ログインするか、ページを再読み込みしてください。</p>
+          </div>
+          <a href="/api/auth/logout" class="inline-flex items-center justify-center gap-2 w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl transition border border-slate-700">
+            別のカウントでログインし直す
           </a>
-        {% endfor %}
-      </div>
+        </div>
+      {% else %}
+        <!-- サーバー一覧カードグリッド -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {% for guild in guilds %}
+            <a href="/guild/{{ guild.id }}" class="group bg-slate-900/80 border border-slate-800 hover:border-brand-500/50 rounded-2xl p-5 flex items-center justify-between transition shadow-lg hover:shadow-brand-500/10">
+              <div class="flex items-center gap-4">
+                {% if guild.icon %}
+                  <img src="{{ guild.icon }}" alt="{{ guild.name }}" class="w-12 h-12 rounded-2xl object-cover bg-slate-800">
+                {% else %}
+                  <div class="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-400 font-bold text-lg">
+                    {{ guild.name[:1] }}
+                  </div>
+                {% endif %}
+                <div>
+                  <h3 class="font-bold text-white group-hover:text-brand-400 transition">{{ guild.name }}</h3>
+                  <p class="text-xs text-slate-400 mt-0.5">
+                    {% if guild.is_admin %}
+                      <span class="text-amber-400 font-medium">✨ 管理者権限あり</span>
+                    {% else %}
+                      <span class="text-slate-500">一般メンバー (アラームのみ)</span>
+                    {% endif %}
+                  </p>
+                </div>
+              </div>
+              <div class="w-8 h-8 rounded-xl bg-slate-800 group-hover:bg-brand-500 text-slate-400 group-hover:text-white flex items-center justify-center transition">
+                <i data-lucide="chevron-right" class="w-4 h-4"></i>
+              </div>
+            </a>
+          {% endfor %}
+        </div>
+      {% endif %}
+
     {% else %}
       <!-- 未ログインカード -->
       <div class="max-w-md mx-auto my-12 bg-slate-900/80 border border-slate-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
