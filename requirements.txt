@@ -1,2 +1,7 @@
 discord.py
 python-dotenv
+yt-dlp
+fastapi
+uvicorn
+jinja2
+python-multipart
