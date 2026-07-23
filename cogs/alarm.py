@@ -5,15 +5,6 @@ import uuid
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-
-# JST (日本時間) の定義
-try:
-    import zoneinfo
-    JST = zoneinfo.ZoneInfo("Asia/Tokyo")
-except ImportError:
-    import pytz
-    JST = pytz.timezone("Asia/Tokyo")
-
 from utils.audio_downloader import AudioDownloader
 
 
@@ -138,7 +129,6 @@ class AlarmGroup(app_commands.Group):
                 "vc_channel_id": vc.id,
                 "local_file_path": local_path,
                 "enabled": True,
-                "last_triggered": None,
             }
         )
         self.cog.save_data(data)
@@ -266,6 +256,7 @@ class Alarm(commands.Cog):
         self.alarm_group = AlarmGroup(self)
         self.bot.tree.add_command(self.alarm_group)
         self.active_alarms = {}
+        self.last_stopped_time = {}  # 🔑 手動停止した時刻(HH:MM)を記録して同じ分内の再発火を防ぐ
         self.check_alarms.start()
 
     def cog_unload(self):
@@ -282,6 +273,10 @@ class Alarm(commands.Cog):
         guild_id = guild.id
         self.active_alarms[guild_id] = False
 
+        # 🔑 停止した瞬間の時刻(HH:MM)を記録し、この分(minute)の間は再発火しないようにする
+        now = datetime.datetime.now()
+        self.last_stopped_time[guild_id] = now.strftime("%H:%M")
+
         voice_client = guild.voice_client
         if voice_client:
             if voice_client.is_playing():
@@ -290,66 +285,35 @@ class Alarm(commands.Cog):
             return True
         return False
 
-    # ====================================================
-    # 🔑 アラーム監視・自動削除・重複発火防止ループ（JST固定版）
-    # ====================================================
-    @tasks.loop(seconds=5)
+    @tasks.loop(seconds=10)
     async def check_alarms(self):
-        # 🔑 日本時間 (JST) で現在時刻を取得
-        now = datetime.datetime.now(JST)
-        current_time = now.strftime("%H:%M")     # 例: "14:30"
-        current_date = now.strftime("%Y-%m-%d") # 例: "2026-07-23"
+        now = datetime.datetime.now()
+        current_time = now.strftime("%H:%M")
 
         data = self.get_data()
-        updated = False
-
         for guild_id_str, alarm_list in data.items():
             guild = self.bot.get_guild(int(guild_id_str))
             if not guild:
                 continue
 
-            new_alarm_list = []
-            guild_updated = False
+            # すでに再生中の場合はスキップ（元コードと同じ）
+            if self.active_alarms.get(guild.id, False):
+                continue
+
+            # 🔑 同じ分(minute)のうちに停止ボタンを押した場合は再発火をスキップ
+            if self.last_stopped_time.get(guild.id) == current_time:
+                continue
 
             for alarm in alarm_list:
                 if not alarm.get("enabled", True):
-                    new_alarm_list.append(alarm)
                     continue
 
-                alarm_time = alarm.get("time")
-                alarm_mode = alarm.get("mode", "repeat")
-                last_triggered = alarm.get("last_triggered")
-
-                # 【トリガー判定】
-                # 時刻が一致し、かつ本日の日付と last_triggered が異なる場合のみ発火
-                if current_time == alarm_time and last_triggered != current_date:
-                    if not self.active_alarms.get(guild.id, False):
-                        self.bot.loop.create_task(
-                            self.play_alarm_loop(guild, alarm)
-                        )
-
-                    # 発火済みフラグとして「今日の日付 (YYYY-MM-DD)」をセット
-                    alarm["last_triggered"] = current_date
-                    guild_updated = True
-                    updated = True
-
-                    # 1回のみ（once）の場合は保存リストから外す（削除）
-                    if alarm_mode == "once":
-                        audio_path = alarm.get("local_file_path")
-                        if audio_path and os.path.exists(audio_path):
-                            try:
-                                os.remove(audio_path)
-                            except Exception as e:
-                                print(f"⚠️ 1回きりアラーム音声ファイル削除エラー: {e}")
-                        continue  # 新しいリストに入れないことで削除
-
-                new_alarm_list.append(alarm)
-
-            if guild_updated:
-                data[guild_id_str] = new_alarm_list
-
-        if updated:
-            self.save_data(data)
+                if alarm.get("time") == current_time:
+                    # 🔑 即座に再生中フラグを立てて二重起動を防ぐ
+                    self.active_alarms[guild.id] = True
+                    self.bot.loop.create_task(
+                        self.play_alarm_loop(guild, alarm)
+                    )
 
     @check_alarms.before_loop
     async def before_check_alarms(self):
@@ -374,24 +338,30 @@ class Alarm(commands.Cog):
         audio_path = alarm.get("local_file_path")
 
         if not vc_id or not audio_path or not os.path.exists(audio_path):
+            self.active_alarms[guild.id] = False
             return
 
         vc_channel = guild.get_channel(int(vc_id))
         if not isinstance(vc_channel, discord.VoiceChannel):
+            self.active_alarms[guild.id] = False
             return
 
-        voice_client = guild.voice_client
-        if voice_client:
-            if voice_client.channel.id != vc_channel.id:
-                await voice_client.move_to(vc_channel)
-        else:
-            voice_client = await vc_channel.connect()
-
-        self.active_alarms[guild.id] = True
+        try:
+            voice_client = guild.voice_client
+            if voice_client:
+                if voice_client.channel.id != vc_channel.id:
+                    await voice_client.move_to(vc_channel)
+            else:
+                voice_client = await vc_channel.connect()
+        except Exception as e:
+            print(f"⚠️ VC接続エラー: {e}")
+            self.active_alarms[guild.id] = False
+            return
 
         # 対象VCのチャット欄にボタンを送信
         await self.send_alarm_message(guild, vc_channel, alarm)
 
+        # 音声再生ループ
         while self.active_alarms.get(guild.id, False) and voice_client.is_connected():
             if not voice_client.is_playing():
                 audio_source = discord.FFmpegPCMAudio(audio_path)
@@ -400,6 +370,25 @@ class Alarm(commands.Cog):
             await asyncio.sleep(1)
 
         self.active_alarms[guild.id] = False
+
+        # 🔑 【1回のみ (once) の削除処理】
+        # アラームが停止して再生ループを抜けた後、モードが once であれば自動削除する
+        if alarm.get("mode") == "once":
+            try:
+                data = self.get_data()
+                guild_id_str = str(guild.id)
+                if guild_id_str in data:
+                    # 対象のアラームをリストから除去
+                    data[guild_id_str] = [
+                        a for a in data[guild_id_str] if a.get("id") != alarm.get("id")
+                    ]
+                    self.save_data(data)
+
+                # 音声ファイルの削除
+                if audio_path and os.path.exists(audio_path):
+                    os.remove(audio_path)
+            except Exception as e:
+                print(f"⚠️ 1回きりアラームの自動削除エラー: {e}")
 
 
 async def setup(bot: commands.Bot):
