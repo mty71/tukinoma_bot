@@ -8,17 +8,19 @@
         Tukinoma Bot Dashboard
       </h1>
     </div>
-    <!-- メインナビタブ -->
-    <div class="flex gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800">
-      <button onclick="switchNav('alarm')" id="navAlarm" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-500 text-white flex items-center gap-1.5">
-        <i data-lucide="alarm-clock" class="w-4 h-4"></i> アラーム
-      </button>
-      <button onclick="switchNav('vc')" id="navVc" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 flex items-center gap-1.5">
-        <i data-lucide="volume-2" class="w-4 h-4"></i> VC通知
-      </button>
-      <button onclick="switchNav('clear')" id="navClear" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 flex items-center gap-1.5">
-        <i data-lucide="trash-2" class="w-4 h-4"></i> メッセージ削除
-      </button>
+
+    <!-- ログイン状態の表示・制御 -->
+    <div class="flex items-center gap-4">
+      {% if is_authenticated %}
+        <span class="text-xs text-slate-300 font-medium">👤 {{ username }}</span>
+        <a href="/api/auth/logout" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300">
+          ログアウト
+        </a>
+      {% else %}
+        <a href="/api/auth/login" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-500 hover:bg-brand-600 text-white flex items-center gap-1.5">
+          <i data-lucide="log-in" class="w-4 h-4"></i> Discordでログイン
+        </a>
+      {% endif %}
     </div>
   </div>
 </header>
