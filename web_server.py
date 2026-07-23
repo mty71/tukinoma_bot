@@ -93,6 +93,24 @@ async def delete_alarm(guild_id: str = Form(...), alarm_id: str = Form(...)):
     return {"status": "ok"}
 
 
+# web_server.py に追加する API エンドポイント
+@app.post("/api/alarm/stop")
+async def stop_alarm_api(guild_id: str = Form(...)):
+    if not bot_instance:
+        return {"status": "error", "message": "Bot is not connected"}
+
+    guild = bot_instance.get_guild(int(guild_id))
+    if not guild:
+        return {"status": "error", "message": "Guild not found"}
+
+    alarm_cog = bot_instance.get_cog("Alarm")
+    if alarm_cog:
+        stopped = await alarm_cog.stop_alarm_for_guild(guild)
+        if stopped:
+            return {"status": "ok", "message": "Stopped"}
+
+    return {"status": "error", "message": "No active alarm playing"}
+
 # ----------------------------------------------------
 # 2. VC通知設定 API (CRUD)
 # ----------------------------------------------------
