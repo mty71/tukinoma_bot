@@ -1,27 +1,22 @@
-import json
-import os
 import time
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-CONFIG_FILE = "config.json"
-
 
 class VCNotifier(commands.Cog):
+    FEATURE_NAME = "vc_notifier"  # このCog専用のデータキー (data/vc_notifier.json に保存されます)
 
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot):
         self.bot = bot
 
-    def load_config(self) -> dict:
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return {}
+    def get_data(self) -> dict:
+        """設定マネージャー経由でデータを読み込み"""
+        return self.bot.config_manager.load(self.FEATURE_NAME)
 
-    def save_config(self, config: dict):
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4)
+    def save_data(self, data: dict) -> None:
+        """設定マネージャー経由でデータを保存"""
+        self.bot.config_manager.save(self.FEATURE_NAME, data)
 
     def get_mention_text(self, member: discord.Member, vc_setting: dict) -> str:
         m_type = vc_setting.get("mention_type", "none")
@@ -74,20 +69,19 @@ class VCNotifier(commands.Cog):
 
         guild_id = str(interaction.guild_id)
         vc_id_str = str(vc.id)
-        config = self.load_config()
+        data = self.get_data()
 
-        if guild_id not in config:
-            config[guild_id] = {}
+        if guild_id not in data:
+            data[guild_id] = {}
 
-        # VCのIDをキーにして複数保持できるようにデータ構造を変更
-        config[guild_id][vc_id_str] = {
+        data[guild_id][vc_id_str] = {
             "notify_channel_id": text_channel.id,
             "mention_type": mention_type,
             "mention_role_id": (
                 role_to_mention.id if role_to_mention else None
             ),
         }
-        self.save_config(config)
+        self.save_data(data)
 
         embed = discord.Embed(
             title="⚙️ VC通知設定を追加・更新しました", color=0x57F287
@@ -116,9 +110,9 @@ class VCNotifier(commands.Cog):
     )
     async def vc_list(self, interaction: discord.Interaction):
         guild_id = str(interaction.guild_id)
-        config = self.load_config()
+        data = self.get_data()
 
-        if guild_id not in config or not config[guild_id]:
+        if guild_id not in data or not data[guild_id]:
             await interaction.response.send_message(
                 "⚠️ 登録されている設定はありません。`/vc_add` で追加してください。",
                 ephemeral=True,
@@ -129,7 +123,7 @@ class VCNotifier(commands.Cog):
             title="📋 登録済みのVC通知一覧", color=0x3498DB
         )
 
-        for vc_id_str, setting in config[guild_id].items():
+        for vc_id_str, setting in data[guild_id].items():
             notify_ch_id = setting.get("notify_channel_id")
             m_type = setting.get("mention_type", "none")
             m_role_id = setting.get("mention_role_id")
@@ -171,26 +165,23 @@ class VCNotifier(commands.Cog):
 
         guild_id = str(interaction.guild_id)
         vc_id_str = str(vc.id)
-        config = self.load_config()
+        data = self.get_data()
 
-        if (
-            guild_id not in config
-            or vc_id_str not in config[guild_id]
-        ):
+        if guild_id not in data or vc_id_str not in data[guild_id]:
             await interaction.response.send_message(
                 f"⚠️ <#{vc.id}> の設定は存在しません。", ephemeral=True
             )
             return
 
-        del config[guild_id][vc_id_str]
-        self.save_config(config)
+        del data[guild_id][vc_id_str]
+        self.save_data(data)
 
         await interaction.response.send_message(
             f"🗑️ <#{vc.id}> の通知設定を削除しました。"
         )
 
     # ----------------------------------------------------
-    # 4. イベント処理 (複数VC対応)
+    # 4. イベント処理 (VC接続/切断)
     # ----------------------------------------------------
     @commands.Cog.listener()
     async def on_voice_state_update(
@@ -203,12 +194,12 @@ class VCNotifier(commands.Cog):
             return
 
         guild_id = str(member.guild.id)
-        config = self.load_config()
+        data = self.get_data()
 
-        if guild_id not in config:
+        if guild_id not in data:
             return
 
-        guild_settings = config[guild_id]
+        guild_settings = data[guild_id]
         now_timestamp = int(time.time())
         avatar_url = (
             member.display_avatar.url
@@ -219,7 +210,6 @@ class VCNotifier(commands.Cog):
         # 1. 接続（参加）判定
         if after.channel:
             after_vc_id = str(after.channel.id)
-            # 参加したVCが設定リストに存在し、かつ移動前の場所と異なる場合
             if after_vc_id in guild_settings and (
                 before.channel is None or before.channel.id != after.channel.id
             ):
@@ -246,7 +236,6 @@ class VCNotifier(commands.Cog):
         # 2. 切断（退出）判定
         if before.channel:
             before_vc_id = str(before.channel.id)
-            # 退出したVCが設定リストに存在し、かつ移動後の場所と異なる場合
             if before_vc_id in guild_settings and (
                 after.channel is None or after.channel.id != before.channel.id
             ):

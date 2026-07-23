@@ -4,14 +4,15 @@ import sys
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+from utils.config_manager import ConfigManager
 
-# .env ファイルから環境変数を読み込み
 load_dotenv()
-
 BOT_TOKEN = os.getenv("DISCORD_TOKEN")
 
 if not BOT_TOKEN:
-    print("❌ エラー: .env ファイルまたは環境変数に 'DISCORD_TOKEN' が設定されていません。")
+    print(
+        "❌ エラー: .env ファイルまたは環境変数に 'DISCORD_TOKEN' が設定されていません。"
+    )
     sys.exit(1)
 
 intents = discord.Intents.default()
@@ -19,7 +20,16 @@ intents.voice_states = True
 intents.members = True
 intents.guilds = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+
+class MyBot(commands.Bot):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 設定マネージャーをBotオブジェクトに保持させる
+        self.config_manager = ConfigManager()
+
+
+bot = MyBot(command_prefix="!", intents=intents)
 
 
 @bot.event
@@ -28,12 +38,14 @@ async def on_ready():
     print(f" ログイン成功: {bot.user.name} (ID: {bot.user.id})")
     print("====================================")
 
-    # 参加中のすべてのサーバーに対してコマンドを強制同期
+    # 参加しているサーバーへコマンドを即時同期
     try:
         for guild in bot.guilds:
             bot.tree.copy_global_to(guild=guild)
             synced = await bot.tree.sync(guild=guild)
-            print(f"✅ {guild.name} (ID: {guild.id}) に {len(synced)} 個のコマンドを同期しました")
+            print(
+                f"✅ {guild.name} に {len(synced)} 個のコマンドを同期しました"
+            )
     except Exception as e:
         print(f"❌ コマンド同期エラー: {e}")
 
