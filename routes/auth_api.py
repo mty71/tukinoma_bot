@@ -34,7 +34,6 @@ async def callback(request: Request, code: str):
         err = quote("Botが接続されていません")
         return RedirectResponse(f"/?error={err}")
 
-    # 1. アクセストークンの取得
     data = {
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
@@ -55,7 +54,6 @@ async def callback(request: Request, code: str):
 
     access_token = token_res.json().get("access_token")
 
-    # 2. 所属サーバー一覧（パーミッション情報含む）を取得
     guilds_res = requests.get(
         "https://discord.com/api/v10/users/@me/guilds",
         headers={"Authorization": f"Bearer {access_token}"},
@@ -67,59 +65,43 @@ async def callback(request: Request, code: str):
     user_guilds = guilds_res.json()
     user_guild_ids = {g["id"] for g in user_guilds}
 
-    # Botが参加しているサーバー一覧
     bot_guild_ids = {str(guild.id) for guild in bot_instance.guilds}
+    common_guild_ids = user_guild_ids.intersection(bot_guild_ids)
 
-    # 共通のサーバーIDを抽出
-    common_guilds = list(user_guild_ids.intersection(bot_guild_ids))
-
-    if not common_guilds:
-        err = quote(
-            "Botが参加しているサーバーに所属していません。対象のDiscordサーバーに参加してから再度お試しください。"
-        )
+    if not common_guild_ids:
+        err = quote("Botが参加しているサーバーに所属していません。")
         return RedirectResponse(f"/?error={err}")
 
-    # 🔑 管理者権限（Administrator = 0x8）を持っているかチェック
-    is_admin = False
+    # 共通サーバーのデータを整理（名前、アイコン、管理者フラグを含める）
+    managed_guilds = []
     ADMINISTRATOR_BIT = 0x8
 
     for g in user_guilds:
-        if g["id"] in common_guilds:
+        if g["id"] in common_guild_ids:
             perms = int(g.get("permissions", 0))
-            if g.get("owner") or (perms & ADMINISTRATOR_BIT) == ADMINISTRATOR_BIT:
-                is_admin = True
-                break
+            is_admin = bool(g.get("owner") or (perms & ADMINISTRATOR_BIT) == ADMINISTRATOR_BIT)
+            
+            # アイコンURLの生成
+            icon_hash = g.get("icon")
+            icon_url = f"https://cdn.discordapp.com/icons/{g['id']}/{icon_hash}.png" if icon_hash else None
 
-    # 3. ユーザー情報の取得
+            managed_guilds.append({
+                "id": g["id"],
+                "name": g["name"],
+                "icon": icon_url,
+                "is_admin": is_admin
+            })
+
     user_res = requests.get(
         "https://discord.com/api/v10/users/@me",
         headers={"Authorization": f"Bearer {access_token}"},
     )
     user_data = user_res.json()
 
-    # Cookieのセット（is_admin も追加）
     response = RedirectResponse(url="/")
-    response.set_cookie(
-        key="user_id", value=user_data["id"], max_age=86400, httponly=True
-    )
-    response.set_cookie(
-        key="username",
-        value=user_data["username"],
-        max_age=86400,
-        httponly=True,
-    )
-    response.set_cookie(
-        key="user_guilds",
-        value=json.dumps(common_guilds),
-        max_age=86400,
-        httponly=True,
-    )
-    response.set_cookie(
-        key="is_admin",
-        value="true" if is_admin else "false",
-        max_age=86400,
-        httponly=True,
-    )
+    response.set_cookie(key="user_id", value=user_data["id"], max_age=86400, httponly=True)
+    response.set_cookie(key="username", value=user_data["username"], max_age=86400, httponly=True)
+    response.set_cookie(key="managed_guilds", value=json.dumps(managed_guilds), max_age=86400, httponly=True)
 
     return response
 
@@ -129,6 +111,5 @@ async def logout():
     response = RedirectResponse(url="/")
     response.delete_cookie("user_id")
     response.delete_cookie("username")
-    response.delete_cookie("user_guilds")
-    response.delete_cookie("is_admin")
+    response.delete_cookie("managed_guilds")
     return response

@@ -1,46 +1,40 @@
 <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
   <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <div class="p-2 bg-brand-500/10 rounded-xl text-brand-500">
-        <i data-lucide="bot" class="w-6 h-6"></i>
+    <div class="flex items-center gap-4">
+      <!-- サーバー一覧へ戻るボタン -->
+      <a href="/" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition flex items-center gap-1.5 text-xs font-medium" title="サーバー選択に戻る">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i> <span class="hidden sm:inline">サーバー一覧</span>
+      </a>
+
+      <div class="flex items-center gap-2">
+        <h1 class="text-base sm:text-lg font-bold text-white truncate max-w-[200px] sm:max-w-xs">
+          {% if current_guild %}{{ current_guild.name }}{% else %}Dashboard{% endif %}
+        </h1>
       </div>
-      <h1 class="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-        Tukinoma Bot Dashboard
-      </h1>
     </div>
 
     {% if is_authenticated %}
-      <!-- 🔑 ナビゲーションタブ -->
+      <!-- ナビゲーションタブ -->
       <div class="flex gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800">
-        <!-- 全員共通（アラーム） -->
         <button onclick="switchNav('alarm')" id="navAlarm" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-500 text-white flex items-center gap-1.5 transition">
           <i data-lucide="alarm-clock" class="w-4 h-4"></i> アラーム
         </button>
-
-        <!-- 管理者限定タブ -->
         {% if is_admin %}
           <button onclick="switchNav('vc')" id="navVc" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
             <i data-lucide="volume-2" class="w-4 h-4"></i> VC通知
           </button>
           <button onclick="switchNav('clear')" id="navClear" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
-            <i data-lucide="trash-2" class="w-4 h-4"></i> メッセージ削除
+            <i data-lucide="trash-2" class="w-4 h-4"></i> 削除
           </button>
         {% endif %}
       </div>
 
-      <!-- ユーザー情報 & ログアウト -->
       <div class="flex items-center gap-3">
         <span class="text-xs text-slate-300 font-medium hidden md:inline">
           👤 {{ username }} {% if is_admin %}<span class="ml-1 text-[10px] px-1.5 py-0.5 bg-amber-500/10 text-amber-400 rounded border border-amber-500/20">管理者</span>{% endif %}
         </span>
         <a href="/api/auth/logout" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
           ログアウト
-        </a>
-      </div>
-    {% else %}
-      <div>
-        <a href="/api/auth/login" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-brand-500 hover:bg-brand-600 text-white flex items-center gap-1.5 transition">
-          <i data-lucide="log-in" class="w-4 h-4"></i> Discordでログイン
         </a>
       </div>
     {% endif %}

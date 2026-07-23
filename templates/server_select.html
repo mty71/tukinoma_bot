@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>サーバー選択 - Tukinoma Bot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: { colors: { brand: { 500: '#5865F2', 600: '#4752C4' } } }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased flex flex-col">
+
+  <!-- ヘッダー -->
+  <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="p-2 bg-brand-500/10 rounded-xl text-brand-500">
+          <i data-lucide="bot" class="w-6 h-6"></i>
+        </div>
+        <h1 class="text-xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+          Tukinoma Bot Dashboard
+        </h1>
+      </div>
+      {% if is_authenticated %}
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-slate-300 font-medium">👤 {{ username }}</span>
+          <a href="/api/auth/logout" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">ログアウト</a>
+        </div>
+      {% endif %}
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-4 py-12 flex-1 w-full space-y-8">
+    {% if is_authenticated %}
+      <div class="text-center space-y-2">
+        <h2 class="text-2xl font-bold text-white">管理するサーバーを選択</h2>
+        <p class="text-sm text-slate-400">Botが導入されており、あなたが参加しているサーバー一覧です。</p>
+      </div>
+
+      {% if error_message %}
+        <div class="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-2xl text-xs flex items-center gap-3">
+          <i data-lucide="alert-triangle" class="w-5 h-5 text-rose-500"></i>
+          <div>{{ error_message }}</div>
+        </div>
+      {% endif %}
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {% for guild in guilds %}
+          <a href="/guild/{{ guild.id }}" class="group bg-slate-900/80 border border-slate-800 hover:border-brand-500/50 rounded-2xl p-5 flex items-center justify-between transition shadow-lg hover:shadow-brand-500/10">
+            <div class="flex items-center gap-4">
+              {% if guild.icon %}
+                <img src="{{ guild.icon }}" alt="{{ guild.name }}" class="w-12 h-12 rounded-2xl object-cover bg-slate-800">
+              {% else %}
+                <div class="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-400 font-bold text-lg">
+                  {{ guild.name[:1] }}
+                </div>
+              {% endif %}
+              <div>
+                <h3 class="font-bold text-white group-hover:text-brand-400 transition">{{ guild.name }}</h3>
+                <p class="text-xs text-slate-400 mt-0.5">
+                  {% if guild.is_admin %}
+                    <span class="text-amber-400 font-medium">✨ 管理者権限あり</span>
+                  {% else %}
+                    <span class="text-slate-500">一般メンバー (アラームのみ)</span>
+                  {% endif %}
+                </p>
+              </div>
+            </div>
+            <div class="w-8 h-8 rounded-xl bg-slate-800 group-hover:bg-brand-500 text-slate-400 group-hover:text-white flex items-center justify-center transition">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <!-- 未ログインカード -->
+      <div class="max-w-md mx-auto my-12 bg-slate-900/80 border border-slate-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
+        <div class="w-16 h-16 bg-brand-500/10 text-brand-500 rounded-2xl flex items-center justify-center mx-auto">
+          <i data-lucide="shield-lock" class="w-8 h-8"></i>
+        </div>
+        <div class="space-y-2">
+          <h2 class="text-xl font-bold text-white">ログインが必要です</h2>
+          <p class="text-sm text-slate-400">ダッシュボードを利用するにはDiscordアカウントでログインしてください。</p>
+        </div>
+        <a href="/api/auth/login" class="inline-flex items-center justify-center gap-2 w-full py-3 bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-xl transition shadow-lg shadow-brand-500/25">
+          <i data-lucide="log-in" class="w-5 h-5"></i> Discordでログイン
+        </a>
+      </div>
+    {% endif %}
+  </main>
+
+  <script>lucide.createIcons();</script>
+</body>
+</html>

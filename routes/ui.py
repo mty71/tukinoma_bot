@@ -1,52 +1,72 @@
 import json
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Request, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse
 from utils.config_manager import ConfigManager
 
 router = APIRouter()
 config_manager = ConfigManager()
 
 
+# 1. サーバー選択画面（ルート）
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request, error: str = None):
     templates = request.app.state.templates
 
     user_id = request.cookies.get("user_id")
     username = request.cookies.get("username")
-    user_guilds_raw = request.cookies.get("user_guilds")
-    is_admin_str = request.cookies.get("is_admin", "false")
+    guilds_raw = request.cookies.get("managed_guilds")
 
     is_authenticated = user_id is not None
-    is_admin = is_admin_str == "true"
-    user_guilds = json.loads(user_guilds_raw) if user_guilds_raw else []
+    managed_guilds = json.loads(guilds_raw) if guilds_raw else []
 
+    return templates.TemplateResponse(
+        request=request,
+        name="server_select.html",
+        context={
+            "is_authenticated": is_authenticated,
+            "username": username,
+            "guilds": managed_guilds,
+            "error_message": error,
+        },
+    )
+
+
+# 2. 選択した特定サーバーの設定画面
+@router.get("/guild/{guild_id}", response_class=HTMLResponse)
+async def guild_dashboard(request: Request, guild_id: str):
+    templates = request.app.state.templates
+
+    user_id = request.cookies.get("user_id")
+    username = request.cookies.get("username")
+    guilds_raw = request.cookies.get("managed_guilds")
+
+    if not user_id or not guilds_raw:
+        return RedirectResponse(url="/")
+
+    managed_guilds = json.loads(guilds_raw)
+    target_guild = next((g for g in managed_guilds if g["id"] == guild_id), None)
+
+    if not target_guild:
+        raise HTTPException(status_code=403, detail="このサーバーへのアクセス権限がありません。")
+
+    is_admin = target_guild["is_admin"]
+
+    # データのロードと該当サーバーの抽出
     all_alarms = config_manager.load("alarms")
     all_vc_settings = config_manager.load("vc_notifier")
 
-    filtered_alarms = {}
-    filtered_vc_settings = {}
-
-    if is_authenticated:
-        # アラーム：メンバー全員表示
-        for guild_id, data in all_alarms.items():
-            if guild_id in user_guilds:
-                filtered_alarms[guild_id] = data
-
-        # VC通知：管理者のみ表示
-        if is_admin:
-            for guild_id, data in all_vc_settings.items():
-                if guild_id in user_guilds:
-                    filtered_vc_settings[guild_id] = data
+    server_alarms = {guild_id: all_alarms.get(guild_id, [])}
+    server_vc_settings = {guild_id: all_vc_settings.get(guild_id, [])} if is_admin else {}
 
     return templates.TemplateResponse(
         request=request,
         name="index.html",
         context={
-            "alarms": filtered_alarms,
-            "vc_settings": filtered_vc_settings,
-            "is_authenticated": is_authenticated,
-            "is_admin": is_admin,  # 管理者フラグを渡す
+            "alarms": server_alarms,
+            "vc_settings": server_vc_settings,
+            "is_authenticated": True,
+            "is_admin": is_admin,
             "username": username,
-            "error_message": error,
+            "current_guild": target_guild,
         },
     )
