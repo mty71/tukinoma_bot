@@ -5,7 +5,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from utils.config_manager import ConfigManager
-from web_server import run_web_server  # 追加
+from web_server import run_web_server
 
 load_dotenv()
 BOT_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -62,8 +62,8 @@ async def load_extensions():
 async def main():
     async with bot:
         await load_extensions()
-        # WebUIサーバーを非同期タスクとして並行起動
-        asyncio.create_task(run_web_server())
+        # bot インスタンスを渡して Web サーバーを並行起動
+        asyncio.create_task(run_web_server(bot))
         await bot.start(BOT_TOKEN)
 
 
