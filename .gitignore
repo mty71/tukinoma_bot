@@ -1,0 +1,12 @@
+# 設定ファイル（サーバーごとの設定データ）
+config.json
+
+# トークンなどを環境変数で管理する場合のファイル
+.env
+
+# Pythonのキャッシュ・仮想環境
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/   
