@@ -23,18 +23,30 @@ class VCNotifier(commands.Cog):
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=4)
 
+    def get_mention_text(self, member: discord.Member, vc_setting: dict) -> str:
+        m_type = vc_setting.get("mention_type", "none")
+        if m_type == "user":
+            return f"<@{member.id}> "
+        elif m_type == "everyone":
+            return "@everyone "
+        elif m_type == "role":
+            role_id = vc_setting.get("mention_role_id")
+            if role_id:
+                return f"<@&{role_id}> "
+        return ""
+
     # ----------------------------------------------------
-    # スラッシュコマンド: /vc_setup
+    # 1. 設定追加コマンド (/vc_add)
     # ----------------------------------------------------
     @app_commands.command(
-        name="vc_setup",
-        description="VC通知の接続先・通知チャンネル・メンション設定を行います",
+        name="vc_add",
+        description="監視するVCと通知先の設定を追加・更新します",
     )
     @app_commands.describe(
         vc="監視したいボイスチャンネル",
         text_channel="通知を送信するテキストチャンネル",
-        mention_type="通知時のメンション種類を選んでください",
-        role_to_mention="メンション対象に指定ロールを選んだ場合はここでロールを選択",
+        mention_type="通知時のメンション種類",
+        role_to_mention="指定ロールを選んだ場合の対象ロール",
     )
     @app_commands.choices(
         mention_type=[
@@ -46,7 +58,7 @@ class VCNotifier(commands.Cog):
             app_commands.Choice(name="特定のロールをメンション", value="role"),
         ]
     )
-    async def vc_setup(
+    async def vc_add(
         self,
         interaction: discord.Interaction,
         vc: discord.VoiceChannel,
@@ -61,10 +73,14 @@ class VCNotifier(commands.Cog):
             return
 
         guild_id = str(interaction.guild_id)
+        vc_id_str = str(vc.id)
         config = self.load_config()
 
-        config[guild_id] = {
-            "target_vc_id": vc.id,
+        if guild_id not in config:
+            config[guild_id] = {}
+
+        # VCのIDをキーにして複数保持できるようにデータ構造を変更
+        config[guild_id][vc_id_str] = {
             "notify_channel_id": text_channel.id,
             "mention_type": mention_type,
             "mention_role_id": (
@@ -74,7 +90,7 @@ class VCNotifier(commands.Cog):
         self.save_config(config)
 
         embed = discord.Embed(
-            title="⚙️ VC通知設定を更新しました", color=0x57F287
+            title="⚙️ VC通知設定を追加・更新しました", color=0x57F287
         )
         embed.add_field(name="監視対象VC", value=f"<#{vc.id}>", inline=False)
         embed.add_field(
@@ -90,26 +106,91 @@ class VCNotifier(commands.Cog):
             mention_str = f"<@&{role_to_mention.id}>"
 
         embed.add_field(name="メンション設定", value=mention_str, inline=False)
+        await interaction.response.send_message(embed=embed)
+
+    # ----------------------------------------------------
+    # 2. 設定一覧表示コマンド (/vc_list)
+    # ----------------------------------------------------
+    @app_commands.command(
+        name="vc_list", description="現在登録されているVC通知設定の一覧を表示します"
+    )
+    async def vc_list(self, interaction: discord.Interaction):
+        guild_id = str(interaction.guild_id)
+        config = self.load_config()
+
+        if guild_id not in config or not config[guild_id]:
+            await interaction.response.send_message(
+                "⚠️ 登録されている設定はありません。`/vc_add` で追加してください。",
+                ephemeral=True,
+            )
+            return
+
+        embed = discord.Embed(
+            title="📋 登録済みのVC通知一覧", color=0x3498DB
+        )
+
+        for vc_id_str, setting in config[guild_id].items():
+            notify_ch_id = setting.get("notify_channel_id")
+            m_type = setting.get("mention_type", "none")
+            m_role_id = setting.get("mention_role_id")
+
+            m_str = "なし"
+            if m_type == "user":
+                m_str = "本人"
+            elif m_type == "everyone":
+                m_str = "@everyone"
+            elif m_type == "role" and m_role_id:
+                m_str = f"<@&{m_role_id}>"
+
+            embed.add_field(
+                name=f"🔊 VC: <#{vc_id_str}>",
+                value=(
+                    f"└ **通知先**: <#{notify_ch_id}>\n"
+                    f"└ **メンション**: {m_str}"
+                ),
+                inline=False,
+            )
 
         await interaction.response.send_message(embed=embed)
 
     # ----------------------------------------------------
-    # メンション文字列の生成ヘルパー
+    # 3. 設定削除コマンド (/vc_remove)
     # ----------------------------------------------------
-    def get_mention_text(self, member: discord.Member, config_data: dict) -> str:
-        m_type = config_data.get("mention_type", "none")
-        if m_type == "user":
-            return f"<@{member.id}> "
-        elif m_type == "everyone":
-            return "@everyone "
-        elif m_type == "role":
-            role_id = config_data.get("mention_role_id")
-            if role_id:
-                return f"<@&{role_id}> "
-        return ""
+    @app_commands.command(
+        name="vc_remove", description="指定したVCの通知設定を削除します"
+    )
+    @app_commands.describe(vc="設定を削除したいボイスチャンネル")
+    async def vc_remove(
+        self, interaction: discord.Interaction, vc: discord.VoiceChannel
+    ):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "❌ 管理者権限が必要です。", ephemeral=True
+            )
+            return
+
+        guild_id = str(interaction.guild_id)
+        vc_id_str = str(vc.id)
+        config = self.load_config()
+
+        if (
+            guild_id not in config
+            or vc_id_str not in config[guild_id]
+        ):
+            await interaction.response.send_message(
+                f"⚠️ <#{vc.id}> の設定は存在しません。", ephemeral=True
+            )
+            return
+
+        del config[guild_id][vc_id_str]
+        self.save_config(config)
+
+        await interaction.response.send_message(
+            f"🗑️ <#{vc.id}> の通知設定を削除しました。"
+        )
 
     # ----------------------------------------------------
-    # イベント処理: VCの入退室（接続・切断）検知
+    # 4. イベント処理 (複数VC対応)
     # ----------------------------------------------------
     @commands.Cog.listener()
     async def on_voice_state_update(
@@ -127,56 +208,67 @@ class VCNotifier(commands.Cog):
         if guild_id not in config:
             return
 
-        guild_config = config[guild_id]
-        target_vc_id = guild_config.get("target_vc_id")
-        notify_channel_id = guild_config.get("notify_channel_id")
-
-        notify_channel = member.guild.get_channel(notify_channel_id)
-        if not notify_channel:
-            return
-
+        guild_settings = config[guild_id]
+        now_timestamp = int(time.time())
         avatar_url = (
             member.display_avatar.url
             if member.display_avatar
             else member.default_avatar.url
         )
-        now_timestamp = int(time.time())
-        mention_text = self.get_mention_text(member, guild_config)
 
-        # 1. 接続（参加）処理
-        if (before.channel is None or before.channel.id != target_vc_id) and (
-            after.channel and after.channel.id == target_vc_id
-        ):
-            embed = discord.Embed(
-                title="VCに接続しました",
-                description=(
-                    f"**{member.display_name}**\n"
-                    f"<#{after.channel.id}> に参加しました\n\n"
-                    f"<t:{now_timestamp}:F>"
-                ),
-                color=0x57F287,  # 緑色
-            )
-            embed.set_thumbnail(url=avatar_url)
+        # 1. 接続（参加）判定
+        if after.channel:
+            after_vc_id = str(after.channel.id)
+            # 参加したVCが設定リストに存在し、かつ移動前の場所と異なる場合
+            if after_vc_id in guild_settings and (
+                before.channel is None or before.channel.id != after.channel.id
+            ):
+                setting = guild_settings[after_vc_id]
+                notify_channel = member.guild.get_channel(
+                    setting.get("notify_channel_id")
+                )
+                if notify_channel:
+                    mention_text = self.get_mention_text(member, setting)
+                    embed = discord.Embed(
+                        title="VCに接続しました",
+                        description=(
+                            f"**{member.display_name}**\n"
+                            f"<#{after.channel.id}> に参加しました\n\n"
+                            f"<t:{now_timestamp}:F>"
+                        ),
+                        color=0x57F287,
+                    )
+                    embed.set_thumbnail(url=avatar_url)
+                    await notify_channel.send(
+                        content=mention_text, embed=embed
+                    )
 
-            # メンション文字列がある場合は content に指定して送信（Embed内だと通知が飛ばないため）
-            await notify_channel.send(content=mention_text, embed=embed)
-
-        # 2. 切断（退出）処理
-        elif (before.channel and before.channel.id == target_vc_id) and (
-            after.channel is None or after.channel.id != target_vc_id
-        ):
-            embed = discord.Embed(
-                title="VCから切断しました",
-                description=(
-                    f"**{member.display_name}**\n"
-                    f"<#{before.channel.id}> から退出しました\n\n"
-                    f"<t:{now_timestamp}:F>"
-                ),
-                color=0xED4245,  # 赤色
-            )
-            embed.set_thumbnail(url=avatar_url)
-
-            await notify_channel.send(content=mention_text, embed=embed)
+        # 2. 切断（退出）判定
+        if before.channel:
+            before_vc_id = str(before.channel.id)
+            # 退出したVCが設定リストに存在し、かつ移動後の場所と異なる場合
+            if before_vc_id in guild_settings and (
+                after.channel is None or after.channel.id != before.channel.id
+            ):
+                setting = guild_settings[before_vc_id]
+                notify_channel = member.guild.get_channel(
+                    setting.get("notify_channel_id")
+                )
+                if notify_channel:
+                    mention_text = self.get_mention_text(member, setting)
+                    embed = discord.Embed(
+                        title="VCから切断しました",
+                        description=(
+                            f"**{member.display_name}**\n"
+                            f"<#{before.channel.id}> から退出しました\n\n"
+                            f"<t:{now_timestamp}:F>"
+                        ),
+                        color=0xED4245,
+                    )
+                    embed.set_thumbnail(url=avatar_url)
+                    await notify_channel.send(
+                        content=mention_text, embed=embed
+                    )
 
 
 async def setup(bot: commands.Bot):
