@@ -34,7 +34,7 @@ async def callback(request: Request, code: str):
         err = quote("Botが接続されていません")
         return RedirectResponse(f"/?error={err}")
 
-    # アクセストークンの取得
+    # 1. アクセストークンの取得
     data = {
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
@@ -55,7 +55,7 @@ async def callback(request: Request, code: str):
 
     access_token = token_res.json().get("access_token")
 
-    # ログインしたユーザーの所属サーバー一覧を取得
+    # 2. 所属サーバー一覧（パーミッション情報含む）を取得
     guilds_res = requests.get(
         "https://discord.com/api/v10/users/@me/guilds",
         headers={"Authorization": f"Bearer {access_token}"},
@@ -73,21 +73,31 @@ async def callback(request: Request, code: str):
     # 共通のサーバーIDを抽出
     common_guilds = list(user_guild_ids.intersection(bot_guild_ids))
 
-    # ❌ サーバーに入っていない場合のUIリダイレクト
     if not common_guilds:
         err = quote(
             "Botが参加しているサーバーに所属していません。対象のDiscordサーバーに参加してから再度お試しください。"
         )
         return RedirectResponse(f"/?error={err}")
 
-    # ログインユーザー情報の取得
+    # 🔑 管理者権限（Administrator = 0x8）を持っているかチェック
+    is_admin = False
+    ADMINISTRATOR_BIT = 0x8
+
+    for g in user_guilds:
+        if g["id"] in common_guilds:
+            perms = int(g.get("permissions", 0))
+            if g.get("owner") or (perms & ADMINISTRATOR_BIT) == ADMINISTRATOR_BIT:
+                is_admin = True
+                break
+
+    # 3. ユーザー情報の取得
     user_res = requests.get(
         "https://discord.com/api/v10/users/@me",
         headers={"Authorization": f"Bearer {access_token}"},
     )
     user_data = user_res.json()
 
-    # Cookieのセット
+    # Cookieのセット（is_admin も追加）
     response = RedirectResponse(url="/")
     response.set_cookie(
         key="user_id", value=user_data["id"], max_age=86400, httponly=True
@@ -104,6 +114,12 @@ async def callback(request: Request, code: str):
         max_age=86400,
         httponly=True,
     )
+    response.set_cookie(
+        key="is_admin",
+        value="true" if is_admin else "false",
+        max_age=86400,
+        httponly=True,
+    )
 
     return response
 
@@ -114,4 +130,5 @@ async def logout():
     response.delete_cookie("user_id")
     response.delete_cookie("username")
     response.delete_cookie("user_guilds")
+    response.delete_cookie("is_admin")
     return response

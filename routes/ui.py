@@ -14,8 +14,10 @@ async def index(request: Request, error: str = None):
     user_id = request.cookies.get("user_id")
     username = request.cookies.get("username")
     user_guilds_raw = request.cookies.get("user_guilds")
+    is_admin_str = request.cookies.get("is_admin", "false")
 
     is_authenticated = user_id is not None
+    is_admin = is_admin_str == "true"
     user_guilds = json.loads(user_guilds_raw) if user_guilds_raw else []
 
     all_alarms = config_manager.load("alarms")
@@ -25,13 +27,16 @@ async def index(request: Request, error: str = None):
     filtered_vc_settings = {}
 
     if is_authenticated:
+        # アラーム：メンバー全員表示
         for guild_id, data in all_alarms.items():
             if guild_id in user_guilds:
                 filtered_alarms[guild_id] = data
 
-        for guild_id, data in all_vc_settings.items():
-            if guild_id in user_guilds:
-                filtered_vc_settings[guild_id] = data
+        # VC通知：管理者のみ表示
+        if is_admin:
+            for guild_id, data in all_vc_settings.items():
+                if guild_id in user_guilds:
+                    filtered_vc_settings[guild_id] = data
 
     return templates.TemplateResponse(
         request=request,
@@ -40,7 +45,8 @@ async def index(request: Request, error: str = None):
             "alarms": filtered_alarms,
             "vc_settings": filtered_vc_settings,
             "is_authenticated": is_authenticated,
+            "is_admin": is_admin,  # 管理者フラグを渡す
             "username": username,
-            "error_message": error,  # ← エラーメッセージをテンプレートへ渡す
+            "error_message": error,
         },
     )

@@ -26,15 +26,18 @@
 
   <main class="max-w-5xl mx-auto px-4 py-8 space-y-8">
     {% if is_authenticated %}
-      <!-- 🔑 ログイン済み：各機能を表示 -->
+      <!-- 🔑 全員利用可能 -->
       {% include "components/alarm_section.html" %}
-      {% include "components/vc_section.html" %}
-      {% include "components/clear_section.html" %}
+
+      <!-- 🔒 管理者限定セクション -->
+      {% if is_admin %}
+        {% include "components/vc_section.html" %}
+        {% include "components/clear_section.html" %}
+      {% endif %}
     {% else %}
-      <!-- 🔒 未ログイン：ログイン案内カードのみ表示 -->
+      <!-- 未ログイン用案内カード -->
       <div class="max-w-md mx-auto my-16 bg-slate-900/80 border border-slate-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
         
-        <!-- ⚠️ エラーメッセージがある場合にUI枠を表示 -->
         {% if error_message %}
           <div class="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-2xl text-xs text-left flex items-start gap-3">
             <i data-lucide="alert-triangle" class="w-5 h-5 shrink-0 mt-0.5 text-rose-500"></i>
@@ -99,7 +102,7 @@
       const res = await fetch(url, { method: 'POST', body: new FormData(e.target) });
       const data = await res.json();
       if (data.status === 'ok') { alert('✅ 保存しました！'); location.reload(); }
-      else { alert('❌ エラーが発生しました'); }
+      else { alert(`❌ エラー: ${data.message || '保存に失敗しました'}`); }
     }
 
     async function deleteItem(url, guildId, targetId, keyName) {
@@ -110,6 +113,7 @@
       const res = await fetch(url, { method: 'POST', body: form });
       const data = await res.json();
       if (data.status === 'ok') { location.reload(); }
+      else { alert(`❌ エラー: ${data.message || '削除に失敗しました'}`); }
     }
 
     async function submitClear(e) {
