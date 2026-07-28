@@ -18,6 +18,7 @@ if not BOT_TOKEN:
 
 intents = discord.Intents.default()
 intents.voice_states = True
+intents.message_content = True
 intents.members = True
 intents.guilds = True
 
