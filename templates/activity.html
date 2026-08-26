@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tukinoma Activity</title>
+    <!-- 既存のCSSがあればここで読み込む -->
+    <style>
+        body { font-family: sans-serif; background-color: #2b2d31; color: white; padding: 20px; }
+        .status-box { padding: 10px; background-color: #1e1f22; border-radius: 8px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <h1>Tukinoma Bot - Activity Mode</h1>
+        <div class="status-box" id="status">Discordに接続中...</div>
+        
+        <!-- 認証成功後に表示したい要素（既存のコンポーネントをincludeしてもOKです） -->
+        <div id="dashboard" style="display: none;">
+            <p>ここにVC用の管理パネルや、クイズのボタンなどを配置します。</p>
+        </div>
+    </div>
+
+    <!-- Discord Embedded App SDK の読み込みと初期化 -->
+    <script type="module">
+        import { DiscordSDK } from "https://unpkg.com/@discord/embedded-app-sdk@1.2.0/output/index.js";
+
+        // 【重要】.envに設定したCLIENT_ID文字列をここに直接記述します
+        const CLIENT_ID = 'YOUR_CLIENT_ID_HERE'; 
+        const discordSdk = new DiscordSDK(CLIENT_ID);
+
+        async function setupActivity() {
+            const statusEl = document.getElementById("status");
+            try {
+                // 1. SDKの準備待機
+                await discordSdk.ready();
+                statusEl.innerText = "SDK準備完了。トークンを取得中...";
+
+                // 2. 認証コード取得
+                const { code } = await discordSdk.commands.authorize({
+                    client_id: CLIENT_ID,
+                    response_type: "code",
+                    state: "",
+                    prompt: "none",
+                    scope: ["identify", "guilds"],
+                });
+
+                // activity.html の fetch 部分
+                const response = await fetch('/api/auth/token', { // 👈 ここを /api/token から変更
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: code }),
+                });
+                
+                if (!response.ok) {
+                    throw new Error("Token exchange API failed");
+                }
+                
+                const { access_token } = await response.json();
+
+                // 4. 認証完了
+                const auth = await discordSdk.commands.authenticate({
+                    access_token: access_token,
+                });
+
+                // 成功時のUI更新
+                statusEl.innerText = `認証成功！こんにちは、${auth.user.username}さん`;
+                document.getElementById("dashboard").style.display = "block";
+                console.log("Activity Authenticated!", auth);
+
+            } catch (error) {
+                console.error("Activity setup failed:", error);
+                statusEl.innerText = "接続エラーが発生しました。コンソールを確認してください。";
+            }
+        }
+
+        setupActivity();
+    </script>
+</body>
+</html>
