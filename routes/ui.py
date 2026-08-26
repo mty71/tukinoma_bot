@@ -77,13 +77,15 @@ async def guild_dashboard(request: Request, guild_id: str):
     )
 
 
-# 👇 ここから下を追記：Activity用の画面（VC内で開かれるページ）
+# routes/ui.py の一番下の部分
+
 @router.get("/activity", response_class=HTMLResponse)
 async def activity_dashboard(request: Request):
     templates = request.app.state.templates
     
-    # Activity内での認証はDiscord SDK側(JS)で行うため、ここではCookieチェック等は不要です
+    # ↓ ここのカッコ '(' に対して...
     return templates.TemplateResponse(
         request=request,
         name="activity.html",
         context={}
+    )
