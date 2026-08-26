@@ -14,6 +14,56 @@
       }
     }
   </script>
+  <script type="module">
+    import { DiscordSDK } from "https://unpkg.com/@discord/embedded-app-sdk@1.2.0/output/index.js";
+
+    // iframeの中(Activity)で動いているかを判定
+    const isEmbedded = window.parent !== window || window.location.search.includes('frame_id');
+
+    // ログイン済みかどうかのフラグ (Jinja2から受け取る)
+    const isAuthenticated = {{ 'true' if is_authenticated else 'false' }};
+
+    if (isEmbedded && !isAuthenticated) {
+        console.log("Discord Activityとして起動中。自動ログインを試行します...");
+        
+        // ENVに設定した CLIENT_ID に置き換えてください
+        const discordSdk = new DiscordSDK('YOUR_CLIENT_ID_HERE');
+
+        async function authenticateActivity() {
+            try {
+                await discordSdk.ready();
+                
+                // Discordクライアントから認証コードをもらう
+                const { code } = await discordSdk.commands.authorize({
+                    client_id: 'YOUR_CLIENT_ID_HERE',
+                    response_type: "code",
+                    state: "",
+                    prompt: "none",
+                    scope: ["identify", "guilds"],
+                });
+
+                // 作成したハイブリッドAPIに投げてCookieをもらう
+                const response = await fetch('/api/auth/activity_login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: code }),
+                });
+
+                if (response.ok) {
+                    console.log("Activity 認証成功！ページをリロードします。");
+                    // Cookieがセットされたのでリロードすると、ブラウザ版と同じダッシュボードが表示される
+                    window.location.reload();
+                }
+            } catch (err) {
+                console.error("Activity 認証エラー:", err);
+            }
+        }
+        
+        authenticateActivity();
+    } else if (!isEmbedded) {
+        console.log("通常のブラウザとして起動中。通常のログインを使用します。");
+    }
+</script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased flex flex-col">
 

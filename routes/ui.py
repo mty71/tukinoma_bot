@@ -6,13 +6,75 @@ from utils.config_manager import ConfigManager
 router = APIRouter()
 config_manager = ConfigManager()
 
-# ==========================================
-# 既存のコード (/, /guild/{guild_id}) はここから
-# ==========================================
-# ... (中略) ...
-# ==========================================
-# 既存のコードはここまで
-# ==========================================
+
+# 1. サーバー選択画面（ルート）
+@router.get("/", response_class=HTMLResponse)
+async def index(request: Request, error: str = None):
+    templates = request.app.state.templates
+
+    user_id = request.cookies.get("user_id")
+    username = request.cookies.get("username")
+    guilds_raw = request.cookies.get("managed_guilds")
+
+    is_authenticated = user_id is not None
+    managed_guilds = json.loads(guilds_raw) if guilds_raw else []
+
+    return templates.TemplateResponse(
+        request=request,
+        name="server_select.html",
+        context={
+            "is_authenticated": is_authenticated,
+            "username": username,
+            "guilds": managed_guilds,
+            "error_message": error,
+        },
+    )
+
+
+# 2. 選択した特定サーバーの設定画面
+@router.get("/guild/{guild_id}", response_class=HTMLResponse)
+async def guild_dashboard(request: Request, guild_id: str):
+    templates = request.app.state.templates
+
+    user_id = request.cookies.get("user_id")
+    username = request.cookies.get("username")
+    guilds_raw = request.cookies.get("managed_guilds")
+
+    if not user_id or not guilds_raw:
+        return RedirectResponse(url="/")
+
+    managed_guilds = json.loads(guilds_raw)
+    target_guild = next((g for g in managed_guilds if g["id"] == guild_id), None)
+
+    if not target_guild:
+        raise HTTPException(
+            status_code=403, detail="このサーバーへのアクセス権限がありません。"
+        )
+
+    is_admin = target_guild["is_admin"]
+
+    all_alarms = config_manager.load("alarms")
+    all_vc_settings = config_manager.load("vc_notifier")
+
+    # アラームデータ（{ guild_id: [...] } 形式）
+    server_alarms = {guild_id: all_alarms.get(guild_id, [])}
+
+    # 🔑 VC設定は全データ ( { guild_id: { vc_id: { ... } } } ) をそのまま渡すことで、
+    # HTML側の vc_settings.get(current_guild.id) が正しく { vc_id: { ... } } を取得できるようにします
+    server_vc_settings = all_vc_settings if is_admin else {}
+
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={
+            "alarms": server_alarms,
+            "vc_settings": server_vc_settings,
+            "is_authenticated": True,
+            "is_admin": is_admin,
+            "username": username,
+            "current_guild": target_guild,
+        },
+    )
 
 
 # 👇 ここから下を追記：Activity用の画面（VC内で開かれるページ）
@@ -25,4 +87,3 @@ async def activity_dashboard(request: Request):
         request=request,
         name="activity.html",
         context={}
-    )
