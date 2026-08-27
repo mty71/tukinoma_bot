@@ -26,7 +26,7 @@
         import { DiscordSDK } from "https://unpkg.com/@discord/embedded-app-sdk@1.2.0/output/index.js";
 
         // 【重要】.envに設定したCLIENT_ID文字列をここに直接記述します
-        const CLIENT_ID = 'YOUR_CLIENT_ID_HERE'; 
+        const CLIENT_ID = '{{ client_id }}';
         const discordSdk = new DiscordSDK(CLIENT_ID);
 
         async function setupActivity() {

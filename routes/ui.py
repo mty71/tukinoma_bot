@@ -82,10 +82,11 @@ async def guild_dashboard(request: Request, guild_id: str):
 @router.get("/activity", response_class=HTMLResponse)
 async def activity_dashboard(request: Request):
     templates = request.app.state.templates
-    
-    # ↓ ここのカッコ '(' に対して...
+
+    # .envからCLIENT_IDを取得
+    client_id = os.getenv("DISCORD_CLIENT_ID")
     return templates.TemplateResponse(
         request=request,
         name="activity.html",
-        context={}
+        context={"client_id": client_id}
     )
