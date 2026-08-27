@@ -190,7 +190,11 @@ async def activity_login(request: Request):
         managed_guilds = []
 
     # 3. CookieをセットしてJSONを返す (成功サイン)
-    response = JSONResponse(content={"status": "ok"})
+    response = JSONResponse(content={
+            "status": "ok",
+            "access_token": access_token
+        })
+        
     response.set_cookie(key="user_id", value=user_data["id"], max_age=86400, httponly=True)
     response.set_cookie(key="username", value=user_data["username"], max_age=86400, httponly=True)
     response.set_cookie(key="managed_guilds", value=json.dumps(managed_guilds), max_age=86400, httponly=True)

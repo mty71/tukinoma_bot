@@ -19,41 +19,49 @@
     .discord-hidden { display: none !important; }
   </style>
 
-  <script type="module">
+<script type="module">
     import { DiscordSDK } from "https://unpkg.com/@discord/embedded-app-sdk@1.2.0/output/index.js";
 
-    // 1. 環境とステータスの判定
     const isEmbedded = window.parent !== window || window.location.search.includes('frame_id');
     const isAuthenticated = {{ 'true' if is_authenticated else 'false' }};
-    const CLIENT_ID = '{{ client_id }}'; // バックエンドから渡されたID
+    const CLIENT_ID = '{{ client_id }}';
 
-    // DOMの読み込みが完了した時のUI切り替え処理
+    function setStatus(msg) {
+        const el = document.getElementById("activity-loading-text");
+        if (el) el.innerText = msg;
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
         if (isEmbedded) {
-            // Activityモード時は専用の拡張メニューを表示
-            const activityMenu = document.getElementById("activity-mode-section");
-            if (activityMenu) activityMenu.classList.remove("hidden");
+            // Activityモードの場合、常にSDKの認証フローを走らせる（公式仕様）
+            if (!isAuthenticated) {
+                // 初回アクセス（Cookieなし）の場合はローディング画面を表示
+                document.getElementById("browser-auth-box").style.display = "none";
+                document.getElementById("activity-loading-box").classList.remove("hidden");
+            } else {
+                // 既にログイン済みの場合は、Activity専用メニューを表示
+                const activityMenu = document.getElementById("activity-mode-section");
+                if (activityMenu) activityMenu.classList.remove("hidden");
+            }
             
-            // ヘッダーをスッキリさせる場合（任意）
-            // document.getElementById("main-header").classList.add("hidden");
-        }
-
-        if (isEmbedded && !isAuthenticated) {
-            // Activityで未ログインの場合、ブラウザ用ログインボタンを隠してローディングを表示
-            document.getElementById("browser-auth-box").classList.add("hidden");
-            document.getElementById("activity-loading-box").classList.remove("hidden");
+            if (!CLIENT_ID) {
+                setStatus("❌ エラー: CLIENT_IDが設定されていません");
+                return;
+            }
             
-            // 2. Activity自動ログイン処理の開始
-            authenticateActivity();
+            setupActivity();
         }
     });
 
-    async function authenticateActivity() {
-        console.log("Discord Activityとして起動中。自動ログインを試行します...");
+    async function setupActivity() {
         const discordSdk = new DiscordSDK(CLIENT_ID);
         
         try {
+            if (!isAuthenticated) setStatus("⚙️ SDKを準備中...");
             await discordSdk.ready();
+
+            if (!isAuthenticated) setStatus("🔑 認証コードを取得中...");
+            // SDKからOAuth2の認可コードを取得[cite: 3]
             const { code } = await discordSdk.commands.authorize({
                 client_id: CLIENT_ID,
                 response_type: "code",
@@ -62,21 +70,32 @@
                 scope: ["identify", "guilds"],
             });
 
+            if (!isAuthenticated) setStatus("🌐 サーバーでトークンを交換中...");
             const response = await fetch('/api/auth/activity_login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code: code }),
             });
 
-            if (response.ok) {
-                console.log("Activity 認証成功！");
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            const data = await response.json();
+            
+            if (!isAuthenticated) setStatus("✅ SDK認証を完了中...");
+            // 【重要】公式仕様通り、バックエンドから返ってきたトークンでSDKを認証させる[cite: 3]
+            await discordSdk.commands.authenticate({ access_token: data.access_token });
+            
+            // 初回（Cookie未発行時）は画面をリロードしてダッシュボード本体を描画させる
+            if (!isAuthenticated) {
                 window.location.reload();
             } else {
-                throw new Error("APIレスポンスエラー");
+                console.log("Activity 認証が完了しました。");
+                // ここからSDKの高度な機能（ボイス機能など）が利用可能になります
             }
+            
         } catch (err) {
-            console.error("Activity 認証エラー:", err);
-            document.getElementById("activity-loading-text").innerText = "ログインに失敗しました。再読み込みしてください。";
+            console.error(err);
+            if (!isAuthenticated) setStatus(`❌ 認証エラー: ${err.message}`);
         }
     }
   </script>
