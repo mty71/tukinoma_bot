@@ -20,6 +20,9 @@ async def index(request: Request, error: str = None):
     is_authenticated = user_id is not None
     managed_guilds = json.loads(guilds_raw) if guilds_raw else []
 
+    # 👈 .envからCLIENT_IDを取得
+    client_id = os.getenv("DISCORD_CLIENT_ID", "") 
+
     return templates.TemplateResponse(
         request=request,
         name="server_select.html",
@@ -28,6 +31,7 @@ async def index(request: Request, error: str = None):
             "username": username,
             "guilds": managed_guilds,
             "error_message": error,
+            "client_id": client_id, # 👈 HTMLに渡す
         },
     )
 

@@ -14,61 +14,77 @@
       }
     }
   </script>
+  <style>
+    /* 読み込み時のチラつきを抑えるためのユーティリティ */
+    .discord-hidden { display: none !important; }
+  </style>
+
   <script type="module">
     import { DiscordSDK } from "https://unpkg.com/@discord/embedded-app-sdk@1.2.0/output/index.js";
 
-    // iframeの中(Activity)で動いているかを判定
+    // 1. 環境とステータスの判定
     const isEmbedded = window.parent !== window || window.location.search.includes('frame_id');
-
-    // ログイン済みかどうかのフラグ (Jinja2から受け取る)
     const isAuthenticated = {{ 'true' if is_authenticated else 'false' }};
+    const CLIENT_ID = '{{ client_id }}'; // バックエンドから渡されたID
 
-    if (isEmbedded && !isAuthenticated) {
-        console.log("Discord Activityとして起動中。自動ログインを試行します...");
-        
-        // ENVに設定した CLIENT_ID に置き換えてください
-        const discordSdk = new DiscordSDK('YOUR_CLIENT_ID_HERE');
-
-        async function authenticateActivity() {
-            try {
-                await discordSdk.ready();
-                
-                // Discordクライアントから認証コードをもらう
-                const { code } = await discordSdk.commands.authorize({
-                    client_id: 'YOUR_CLIENT_ID_HERE',
-                    response_type: "code",
-                    state: "",
-                    prompt: "none",
-                    scope: ["identify", "guilds"],
-                });
-
-                // 作成したハイブリッドAPIに投げてCookieをもらう
-                const response = await fetch('/api/auth/activity_login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code: code }),
-                });
-
-                if (response.ok) {
-                    console.log("Activity 認証成功！ページをリロードします。");
-                    // Cookieがセットされたのでリロードすると、ブラウザ版と同じダッシュボードが表示される
-                    window.location.reload();
-                }
-            } catch (err) {
-                console.error("Activity 認証エラー:", err);
-            }
+    // DOMの読み込みが完了した時のUI切り替え処理
+    document.addEventListener("DOMContentLoaded", () => {
+        if (isEmbedded) {
+            // Activityモード時は専用の拡張メニューを表示
+            const activityMenu = document.getElementById("activity-mode-section");
+            if (activityMenu) activityMenu.classList.remove("hidden");
+            
+            // ヘッダーをスッキリさせる場合（任意）
+            // document.getElementById("main-header").classList.add("hidden");
         }
+
+        if (isEmbedded && !isAuthenticated) {
+            // Activityで未ログインの場合、ブラウザ用ログインボタンを隠してローディングを表示
+            document.getElementById("browser-auth-box").classList.add("hidden");
+            document.getElementById("activity-loading-box").classList.remove("hidden");
+            
+            // 2. Activity自動ログイン処理の開始
+            authenticateActivity();
+        }
+    });
+
+    async function authenticateActivity() {
+        console.log("Discord Activityとして起動中。自動ログインを試行します...");
+        const discordSdk = new DiscordSDK(CLIENT_ID);
         
-        authenticateActivity();
-    } else if (!isEmbedded) {
-        console.log("通常のブラウザとして起動中。通常のログインを使用します。");
+        try {
+            await discordSdk.ready();
+            const { code } = await discordSdk.commands.authorize({
+                client_id: CLIENT_ID,
+                response_type: "code",
+                state: "",
+                prompt: "none",
+                scope: ["identify", "guilds"],
+            });
+
+            const response = await fetch('/api/auth/activity_login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: code }),
+            });
+
+            if (response.ok) {
+                console.log("Activity 認証成功！");
+                window.location.reload();
+            } else {
+                throw new Error("APIレスポンスエラー");
+            }
+        } catch (err) {
+            console.error("Activity 認証エラー:", err);
+            document.getElementById("activity-loading-text").innerText = "ログインに失敗しました。再読み込みしてください。";
+        }
     }
-</script>
+  </script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased flex flex-col">
 
   <!-- ヘッダー -->
-  <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+  <header id="main-header" class="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
     <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="p-2 bg-brand-500/10 rounded-xl text-brand-500">
@@ -87,49 +103,78 @@
     </div>
   </header>
 
-  <main class="max-w-4xl mx-auto px-4 py-12 flex-1 w-full space-y-8 flex items-center justify-center">
+  <main class="max-w-4xl mx-auto px-4 py-12 flex-1 w-full space-y-8 flex flex-col items-center justify-center">
     
     {% if is_authenticated %}
-      <div class="w-full space-y-8">
-        <div class="text-center space-y-2">
-          <h2 class="text-2xl font-bold text-white">管理するサーバーを選択</h2>
-          <p class="text-sm text-slate-400">Botが導入されており、あなたが参加しているサーバー一覧です。</p>
+      <div class="w-full space-y-12">
+        
+        <!-- 【拡張用】Activityモード専用エリア (初期状態はhidden, JSで表示) -->
+        <div id="activity-mode-section" class="hidden w-full space-y-4">
+          <div class="p-6 bg-gradient-to-br from-brand-600/20 to-purple-600/20 border border-brand-500/30 rounded-3xl">
+            <div class="flex items-center gap-3 mb-4">
+              <i data-lucide="gamepad-2" class="w-6 h-6 text-brand-400"></i>
+              <h2 class="text-xl font-bold text-white">アクティビティ モード</h2>
+            </div>
+            <p class="text-sm text-slate-300 mb-6">VC内で遊べる機能をここから選択できます。</p>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <!-- モード選択ボタンの例 (リンク先は将来追加する機能) -->
+              <button class="bg-slate-900/80 hover:bg-brand-500 hover:text-white border border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center gap-2 transition group">
+                <i data-lucide="music" class="w-8 h-8 text-slate-400 group-hover:text-white transition"></i>
+                <span class="font-bold">サウンドボード</span>
+              </button>
+              <button class="bg-slate-900/80 hover:bg-brand-500 hover:text-white border border-slate-700 rounded-xl p-4 flex flex-col items-center justify-center gap-2 transition group">
+                <i data-lucide="lightbulb" class="w-8 h-8 text-slate-400 group-hover:text-white transition"></i>
+                <span class="font-bold">早押しクイズ</span>
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {% for guild in guilds %}
-            <a href="/guild/{{ guild.id }}" class="group bg-slate-900/80 border border-slate-800 hover:border-brand-500/50 rounded-2xl p-5 flex items-center justify-between transition shadow-lg hover:shadow-brand-500/10">
-              <div class="flex items-center gap-4">
-                {% if guild.icon %}
-                  <img src="{{ guild.icon }}" alt="{{ guild.name }}" class="w-12 h-12 rounded-2xl object-cover bg-slate-800">
-                {% else %}
-                  <div class="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-400 font-bold text-lg">
-                    {{ guild.name[:1] }}
+        <!-- 既存のサーバー選択エリア -->
+        <div class="w-full space-y-6">
+          <div class="text-center md:text-left space-y-2">
+            <h2 class="text-2xl font-bold text-white flex items-center justify-center md:justify-start gap-2">
+              <i data-lucide="server" class="w-6 h-6 text-brand-500"></i> 管理サーバー選択
+            </h2>
+            <p class="text-sm text-slate-400">設定を変更したいサーバーを選択してください。</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {% for guild in guilds %}
+              <a href="/guild/{{ guild.id }}" class="group bg-slate-900/80 border border-slate-800 hover:border-brand-500/50 rounded-2xl p-5 flex items-center justify-between transition shadow-lg hover:shadow-brand-500/10">
+                <div class="flex items-center gap-4">
+                  {% if guild.icon %}
+                    <img src="{{ guild.icon }}" alt="{{ guild.name }}" class="w-12 h-12 rounded-2xl object-cover bg-slate-800">
+                  {% else %}
+                    <div class="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center text-slate-400 font-bold text-lg">
+                      {{ guild.name[:1] }}
+                    </div>
+                  {% endif %}
+                  <div>
+                    <h3 class="font-bold text-white group-hover:text-brand-400 transition">{{ guild.name }}</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">
+                      {% if guild.is_admin %}
+                        <span class="text-amber-400 font-medium">✨ 管理者</span>
+                      {% else %}
+                        <span class="text-slate-500">一般メンバー</span>
+                      {% endif %}
+                    </p>
                   </div>
-                {% endif %}
-                <div>
-                  <h3 class="font-bold text-white group-hover:text-brand-400 transition">{{ guild.name }}</h3>
-                  <p class="text-xs text-slate-400 mt-0.5">
-                    {% if guild.is_admin %}
-                      <span class="text-amber-400 font-medium">✨ 管理者</span>
-                    {% else %}
-                      <span class="text-slate-500">一般メンバー</span>
-                    {% endif %}
-                  </p>
                 </div>
-              </div>
-              <div class="w-8 h-8 rounded-xl bg-slate-800 group-hover:bg-brand-500 text-slate-400 group-hover:text-white flex items-center justify-center transition">
-                <i data-lucide="chevron-right" class="w-4 h-4"></i>
-              </div>
-            </a>
-          {% endfor %}
+                <div class="w-8 h-8 rounded-xl bg-slate-800 group-hover:bg-brand-500 text-slate-400 group-hover:text-white flex items-center justify-center transition">
+                  <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                </div>
+              </a>
+            {% endfor %}
+          </div>
         </div>
       </div>
 
     {% else %}
-      <!-- 未ログイン または サーバー未所属時のエラー画面 -->
-      <div class="max-w-md w-full bg-slate-900/80 border border-slate-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
-        
+      
+      <!-- 【ブラウザ用】未ログイン画面 -->
+      <div id="browser-auth-box" class="max-w-md w-full bg-slate-900/80 border border-slate-800 rounded-3xl p-8 text-center space-y-6 shadow-2xl">
         {% if error_message %}
           <div class="p-4 bg-rose-500/10 border border-rose-500/30 text-rose-400 rounded-2xl text-xs text-left flex items-start gap-3">
             <i data-lucide="alert-triangle" class="w-5 h-5 shrink-0 mt-0.5 text-rose-500"></i>
@@ -146,13 +191,24 @@
         <div class="space-y-2">
           <h2 class="text-xl font-bold text-white">ログインが必要です</h2>
           <p class="text-sm text-slate-400">
-            ダッシュボードを利用するには、Botが導入されているDiscordサーバーのアカウントでログインしてください。
+            ダッシュボードを利用するには、Discordアカウントでログインしてください。
           </p>
         </div>
         <a href="/api/auth/login" class="inline-flex items-center justify-center gap-2 w-full py-3 bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-xl transition shadow-lg shadow-brand-500/25">
           <i data-lucide="log-in" class="w-5 h-5"></i> Discordでログイン
         </a>
       </div>
+
+      <!-- 【Activity用】自動ログイン中のロード画面 (初期状態はhidden) -->
+      <div id="activity-loading-box" class="hidden max-w-md w-full text-center space-y-6">
+        <div class="flex items-center justify-center">
+          <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-500"></div>
+        </div>
+        <div id="activity-loading-text" class="text-slate-400 font-medium animate-pulse">
+          Discord内で自動認証中...
+        </div>
+      </div>
+      
     {% endif %}
   </main>
 
